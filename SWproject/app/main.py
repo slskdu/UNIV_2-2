@@ -17,21 +17,20 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 시작 시 Redis 연결을 확인하고 수집 태스크를 실행합니다.
     await redis.ping()
     toss_api = TossApiClient(settings)
-    task = asyncio.create_task(collector_loop(toss_api, settings))
+    collector_task = asyncio.create_task(collector_loop(toss_api, settings))
     try:
         yield
     finally:
-        task.cancel()
+        collector_task.cancel()
         with suppress(asyncio.CancelledError):
-            await task
+            await collector_task
         await toss_api.close()
         await close_redis()
 
 
-app = FastAPI(title="Toss Ranking Backend", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Toss Ranking Backend", version="2.0.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,

@@ -15,10 +15,6 @@ CACHE_KEYS = {
 }
 
 
-async def close_redis() -> None:
-    await redis.aclose()
-
-
 async def set_json(key: str, value: Any, ttl: int) -> None:
     await redis.set(key, json.dumps(value, ensure_ascii=False), ex=ttl)
 
@@ -29,22 +25,19 @@ async def get_json(key: str) -> Any | None:
 
 
 async def save_rankings(rankings: dict[str, Any]) -> None:
-    # 한 주기의 세 결과를 각각 저장하므로 일부 API 실패 시 기존 정상 캐시는 보존됩니다.
+    # 개별 저장이므로 한 종류가 실패해도 기존의 다른 캐시를 덮어쓰지 않습니다.
     for name, value in rankings.items():
-        key = CACHE_KEYS[name]
-        await set_json(key, value, settings.cache_ttl_seconds)
+        if name in CACHE_KEYS:
+            await set_json(CACHE_KEYS[name], value, settings.cache_ttl_seconds)
 
 
-async def load_rankings() -> dict[str, Any]:
-    values = await PromiseGather.gather(*(get_json(CACHE_KEYS[name]) for name in CACHE_KEYS))
-    return dict(zip(CACHE_KEYS.keys(), values))
+async def load_rankings() -> dict[str, Any | None]:
+    names = tuple(CACHE_KEYS)
+    values = await __import__("asyncio").gather(
+        *(get_json(CACHE_KEYS[name]) for name in names)
+    )
+    return dict(zip(names, values))
 
 
-class PromiseGather:
-    """asyncio.gather를 Redis 모듈 안에서 명시적으로 감싸는 작은 헬퍼."""
-
-    @staticmethod
-    async def gather(*coroutines):
-        import asyncio
-
-        return await asyncio.gather(*coroutines)
+async def close_redis() -> None:
+    await redis.aclose()
