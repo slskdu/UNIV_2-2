@@ -46,13 +46,13 @@ class Settings(BaseSettings):
     toss_ranking_path: str = "/api/v1/rankings"
 
     # 아래 값은 공식 OpenAPI 스키마의 실제 parameter 이름/허용 값에 맞춰 수정하세요.
-    # 예시 값: TOP_GAINERS, TOP_LOSERS, TRADING_VALUE
+    # 예시 값: TOP_GAINERS, TOP_LOSERS, MARKET_TRADING_AMOUNT
     ranking_type_param: str = "type"
-    ranking_market_param: str = "market"
+    ranking_market_param: str = "marketCountry"
     ranking_duration_param: str = "duration"
     ranking_limit_param: str = "limit"
     ranking_market: str = "KR"
-    ranking_duration: str = "realtime"
+    ranking_duration: str = "1d"
 
     redis_url: str = "redis://localhost:6379/0"
     cache_ttl_seconds: int = 30
@@ -275,7 +275,7 @@ logger = logging.getLogger(__name__)
 RANKING_TYPES = {
     "rising": "TOP_GAINERS",
     "falling": "TOP_LOSERS",
-    "trading_value": "TRADING_VALUE",
+    "trading_value": "MARKET_TRADING_AMOUNT",
 }
 
 
@@ -398,11 +398,11 @@ TOSS_RANKING_PATH=/api/v1/rankings
 
 # 공식 OpenAPI 문서의 ranking parameter schema에 맞춰 확인/수정하세요.
 RANKING_TYPE_PARAM=type
-RANKING_MARKET_PARAM=market
+RANKING_MARKET_PARAM=marketCountry
 RANKING_DURATION_PARAM=duration
 RANKING_LIMIT_PARAM=limit
 RANKING_MARKET=KR
-RANKING_DURATION=realtime
+RANKING_DURATION=1d
 
 REDIS_URL=redis://localhost:6379/0
 CACHE_TTL_SECONDS=30
@@ -458,6 +458,31 @@ curl http://localhost:8000/api/v1/market-trend
 - 시세·종목·랭킹 API는 `Authorization: Bearer {access_token}`만 필요합니다. `X-Tossinvest-Account`는 계좌·자산·주문 계열에서 사용합니다.
 - 토스증권 Open API의 허용 IP 관리에 서버의 공인 IP를 등록해야 합니다. 등록되지 않은 IP는 403이 될 수 있습니다.
 - RANKING 그룹 한도는 공식 문서 기준 초당 최대 5회입니다. 세 요청을 순차 호출하고 0.25초 간격을 둡니다.
-- `TOP_GAINERS`와 `TOP_LOSERS`는 `duration=realtime`을 지원하지 않는다는 문서 오류 설명이 있으므로, 실제 스키마에 맞춰 해당 값은 반드시 확인하세요. 지원되지 않으면 `RANKING_DURATION`을 허용 값으로 변경합니다.
-- `TOP_GAINERS`, `TOP_LOSERS`, `TRADING_VALUE`는 문서의 랭킹 type enum을 기준으로 작성한 예시입니다. 계정의 OpenAPI JSON에서 실제 enum/parameter 이름이 다르면 `.env`와 `RANKING_TYPES`를 수정하세요.
+- 현재 계정 스키마에서 `marketCountry=KR`을 사용합니다. `market=KR`을 사용하면 `invalid-request`가 반환될 수 있습니다.
+- 현재 계정 스키마에서 `TOP_GAINERS`, `TOP_LOSERS`의 기간은 `1d`, `1w`, `1mo`, `3mo`, `6mo`, `1y` 중 하나여야 합니다. `realtime`은 지원되지 않습니다.
+- 거래대금 랭킹의 type은 `MARKET_TRADING_AMOUNT`를 사용합니다. 거래량 랭킹이 필요하면 `MARKET_TRADING_VOLUME`으로 변경할 수 있습니다.
+- 계정의 OpenAPI JSON에서 실제 enum/parameter 이름이 다르면 `.env`와 `RANKING_TYPES`를 수정하세요.
 - 여러 Uvicorn worker를 사용하면 각 worker가 수집기를 하나씩 실행합니다. 수집기는 단일 worker로 운영하거나 별도 scheduler로 분리해야 중복 수집을 피할 수 있습니다.
+
+## 보안 파일
+
+- 실제 API 키는 `.env`에만 입력하고 GitHub에 커밋하지 않습니다.
+- `.gitignore`가 `.env`, `.env.*`, `secrets/`, `credentials/`와 인증서 파일을 제외합니다.
+- GitHub에 올릴 파일에는 예시 값만 있는 `.env.example`을 사용합니다.
+- API 키가 실수로 공개된 적이 있으면 토스 Open API 콘솔에서 키를 폐기하고 새로 발급합니다.
+
+## Redis 실행 시 주의사항
+
+`docker-compose.yml`은 호스트의 `6379` 포트를 사용합니다. 이미 다른 Redis 컨테이너가 `6379`를 사용 중이면 새 컨테이너가 시작되지 않으므로, 기존 Redis를 그대로 사용하거나 기존 컨테이너를 중지한 뒤 실행합니다.
+
+```powershell
+docker ps
+docker compose up -d redis
+docker exec toss-ranking-redis redis-cli ping
+```
+
+기존 Redis가 `6379`에서 실행 중이라면 `.env`의 다음 설정으로 그대로 연결할 수 있습니다.
+
+```dotenv
+REDIS_URL=redis://localhost:6379/0
+```
