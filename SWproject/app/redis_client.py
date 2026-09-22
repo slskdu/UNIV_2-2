@@ -1,3 +1,4 @@
+import asyncio
 import json
 from typing import Any
 
@@ -33,9 +34,7 @@ async def save_rankings(rankings: dict[str, Any]) -> None:
 
 async def load_rankings() -> dict[str, Any | None]:
     names = tuple(CACHE_KEYS)
-    values = await __import__("asyncio").gather(
-        *(get_json(CACHE_KEYS[name]) for name in names)
-    )
+    values = await asyncio.gather(*(get_json(CACHE_KEYS[name]) for name in names))
     return dict(zip(names, values))
 
 

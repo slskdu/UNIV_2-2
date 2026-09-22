@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any
 
 import httpx
@@ -29,27 +30,28 @@ class TossApiClient:
             self.settings.ranking_type_param: ranking_type,
             self.settings.ranking_market_param: self.settings.ranking_market,
             self.settings.ranking_duration_param: self.settings.ranking_duration,
-            self.settings.ranking_limit_param: self.settings.ranking_limit,
+            self.settings.ranking_exclude_caution_param: self.settings.ranking_exclude_investment_caution,
+            self.settings.ranking_count_param: self.settings.safe_ranking_count,
         }
-        response = await self.client.get(
-            self.settings.toss_ranking_path,
-            params=params,
-            headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
-        )
+        response = await self._get_ranking(token, params)
 
         # 토큰 만료 시 한 번만 새 토큰을 받아 재요청합니다.
         if response.status_code == 401:
             self.token_manager._access_token = None
             token = await self.token_manager.get_access_token()
-            response = await self.client.get(
-                self.settings.toss_ranking_path,
-                params=params,
-                headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
-            )
+            response = await self._get_ranking(token, params)
 
         if response.status_code == 429:
-            retry_after = response.headers.get("Retry-After", "1")
-            raise TossApiError(f"RANKING rate limit exceeded; Retry-After={retry_after}")
+            retry_after = float(response.headers.get("Retry-After", "1"))
+            await asyncio.sleep(max(0.0, retry_after))
+            response = await self._get_ranking(token, params)
         if response.is_error:
             raise TossApiError(f"Toss API {response.status_code}: {response.text[:500]}")
         return response.json()
+
+    async def _get_ranking(self, token: str, params: dict[str, Any]) -> httpx.Response:
+        return await self.client.get(
+            self.settings.toss_ranking_path,
+            params=params,
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+        )
