@@ -54,11 +54,17 @@ http://127.0.0.1:8000/health
 랭킹 데이터 API
 http://127.0.0.1:8000/api/v1/market-trend
 
+랭킹 표 화면
+http://127.0.0.1:8000/market-trend
+
 FastAPI 테스트 문서
 http://127.0.0.1:8000/docs
 ```
 
 `/docs`는 사용자용 주식 화면이 아니라 백엔드 API를 확인하고 직접 테스트하는 Swagger UI입니다.
+`/market-trend`는 Redis에 저장된 상승률, 하락률, 거래대금 데이터를 표 형태로 보여주는 웹 화면입니다. 화면은 20초마다 자동으로 새로고침됩니다.
+화면 상단의 `통합`, `국장`, `미장` 버튼으로 시장을 선택할 수 있습니다. 통합 화면은 KR과 US 행을 함께 표시합니다.
+투자 유의 종목은 `excludeInvestmentCaution=false`로 설정하여 제외하지 않습니다. 표의 분야는 종목 마스터가 제공하는 상품 유형(`STOCK`, `ETF` 등)과 거래소(`KOSPI`, `NASDAQ` 등)를 표시합니다. 공식 종목 기본 정보 API에는 산업 섹터(반도체·자동차 등)가 제공되지 않습니다.
 
 ## 3. 토스증권 Open API 연동
 
@@ -121,6 +127,12 @@ count=50
 
 `count`는 공식 API 제한에 맞춰 1~100 범위로 보정합니다.
 
+시장 구분:
+
+- `marketCountry=KR`: 국장(KRX)
+- `marketCountry=US`: 미장(NYSE, NASDAQ 등)
+- 화면의 `통합`: KR과 US를 각각 조회한 뒤 합쳐서 표시
+
 ## 4. Redis 캐싱
 
 Redis는 토스 API에서 수집한 랭킹 데이터를 임시 저장합니다.
@@ -128,15 +140,18 @@ Redis는 토스 API에서 수집한 랭킹 데이터를 임시 저장합니다.
 ### 캐시 키
 
 ```text
-market:ranking:rising
-market:ranking:falling
-market:ranking:trading_value
+market:ranking:kr:rising
+market:ranking:kr:falling
+market:ranking:kr:trading_value
+market:ranking:us:rising
+market:ranking:us:falling
+market:ranking:us:trading_value
 ```
 
 ### 캐시 동작
 
 - 기본 TTL: 30초
-- 랭킹 종류별 개별 저장
+- 국장·미장 및 랭킹 종류별 개별 저장
 - 일부 랭킹 요청이 실패해도 성공한 종류의 기존 캐시는 유지
 - FastAPI API 요청 시 토스 API를 직접 호출하지 않고 Redis 데이터 반환
 - Redis에 데이터가 하나도 없으면 HTTP 503 반환
@@ -249,6 +264,103 @@ SWproject/
 ```
 
 ## 7. 다음 작업 목표
+
+> 아래 7장의 초기 목표는 이후 구현으로 대부분 완료되었습니다. 최신 상태는 9장 최종 구현 상태를 기준으로 확인합니다.
+
+## 8. 분야 분석 및 AI 요약
+
+`/api/v1/market-analysis?market=all`은 랭킹 데이터를 분야별로 묶어 평균 등락률, 상승 종목 비율, 거래대금 비중, 강세 점수를 계산합니다.
+
+웹 화면의 `현재 강세 분야`, `주의 분야` 패널은 이 분석 결과를 표시합니다. `AI 요약 생성` 버튼은 `AI_API_KEY`가 없으면 로컬 수치 요약을 사용하고, 키가 있으면 OpenAI 호환 Chat Completions API를 호출합니다.
+
+공식 종목 기본 정보 API에는 산업 분야가 없으므로, 산업 분야를 사용하려면 `sector_map.json`에 직접 매핑을 추가합니다.
+
+```json
+{
+        "005930": {
+                "weights": {
+                        "반도체/메모리": 0.7,
+                        "스마트폰": 0.2,
+                        "가전": 0.1
+                },
+                "source": "대표 사업 기준 예시",
+                "as_of": "2026-09"
+        },
+        "000660": "반도체",
+        "005380": "자동차",
+        "009150": "전자부품/MLCC",
+        "042700": "반도체 후공정 장비",
+        "006400": "배터리/2차전지"
+}
+```
+
+문자열 값은 100% 단일 분야이고, `weights` 객체는 복합 기업을 여러 분야에 배분합니다. 가중치 합이 1이 아니어도 분석 시 자동 보정됩니다. 매핑된 종목은 세부 분야로 표시되고, 매핑되지 않은 종목은 분석에서 `미분류`로 집계됩니다.
+
+현재 기본값은 `WEIGHTED_ANALYSIS_ENABLED=false`라서 가중치 구조를 보존만 하고 대표 분야 하나로 분석합니다. 정확한 사업부문 자료를 입력한 뒤 `.env`에서 `WEIGHTED_ANALYSIS_ENABLED=true`로 바꾸면 가중 분석이 활성화됩니다.
+
+가중 분석의 신뢰도는 매핑 출처와 기준일에 좌우됩니다. 사업보고서·공식 기업 자료·토스 분야 정보처럼 검증 가능한 자료로 가중치를 갱신하고 `source`, `as_of`를 함께 기록해야 합니다. 가중치는 실제 매출·영업이익·시가총액 비중과 다를 수 있으므로 분석 결과는 참고용이며 투자 판단을 대신하지 않습니다.
+
+## 9. 최종 구현 상태
+
+### 웹 화면
+
+```text
+http://127.0.0.1:9000/market-trend
+```
+
+- `통합`, `국장`, `미장` 시장 버튼
+- 상승률·하락률·거래대금 탭
+- 통합 탭은 KR·US 데이터를 합친 뒤 지표 기준으로 다시 정렬
+- 순위, 종목명, 종목코드, 세부분야, 현재가, 등락률, 거래량, 거래대금 표시
+- `rankedAt` 기준 시각 표시
+- 강세 분야·주의 분야 분석 카드
+- 분야별 상세 분석 표
+- AI 요약 버튼
+- 20초 자동 갱신
+
+### API 목록
+
+```text
+GET /health
+GET /api/v1/market-trend?market=all|kr|us
+GET /api/v1/market-analysis?market=all|kr|us&ai=false
+```
+
+### 분석 지표
+
+- 분야별 평균 등락률
+- 상승·하락 종목 비율
+- 거래대금 비중
+- 분야 점수
+- 강세·중립·주의 신호
+- 복합 기업 가중 분석 플래그
+
+### 현재 보류한 기능
+
+- `WEIGHTED_ANALYSIS_ENABLED=false`로 가중 분석은 비활성화되어 있습니다.
+- `sector_map.json`의 가중치 구조는 보존되어 있으며, 공식 사업부문 자료를 검토한 뒤 활성화해야 합니다.
+- 매핑되지 않은 종목은 `미분류`로 처리됩니다.
+- AI 키가 없으면 로컬 수치 기반 요약을 사용합니다.
+
+### 실행 순서
+
+```powershell
+cd C:\UNIV_2-2\SWproject
+docker compose up -d redis
+python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 9000
+```
+
+Redis 포트 `6379`가 이미 다른 Redis에서 사용 중이면 기존 Redis를 그대로 사용합니다. 서버 실행 후 새 수집 주기가 끝나면 웹 화면에서 데이터를 확인합니다.
+
+선택적 AI 설정:
+
+```dotenv
+AI_API_KEY=발급받은_AI_API_KEY
+AI_MODEL=gpt-4o-mini
+AI_BASE_URL=https://api.openai.com/v1
+```
+
+AI 분석은 투자 조언이 아니라 현재 랭킹 수치를 요약하는 참고 정보입니다.
 
 ### 1단계: API 응답 정리
 

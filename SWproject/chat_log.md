@@ -1,4 +1,5 @@
-# 프로젝트 대화 기록
+cd /d C:\UNIV_2-2\SWproject
+python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 9000# 프로젝트 대화 기록
 
 ## 2026-09-23
 
@@ -191,3 +192,56 @@ source: redis
 ### 다음 날 작업 재개 지침
 
 다음 날 새 창에서 `chat_log.md`의 마지막 기록을 읽고, 위의 `다음 작업 목표` 중 아직 완료되지 않은 항목부터 이어서 작업한다. 우선 현재 서버와 Redis 실행 상태, `.env`의 API 주소, `/api/v1/market-trend` 응답을 다시 확인한 뒤 코드를 수정한다.
+
+## 2026-09-27 최종 작업 기록
+
+### 웹 표 화면
+
+- `/market-trend` HTML 화면을 FastAPI에 추가했다.
+- JSON 응답을 엑셀 형태의 표로 표시하도록 구성했다.
+- 상승률·하락률·거래대금 탭과 새로고침, 20초 자동 갱신을 추가했다.
+- 토스 응답의 실제 구조인 `result.rankings`, `price.lastPrice`, `price.changeRate`, `tradingVolume`, `tradingAmount`에 맞춰 필드를 수정했다.
+- API가 반환하는 소수형 등락률을 백분율로 환산했다.
+- 종목 마스터 API `/api/v1/stocks?symbols=...`를 사용해 종목명과 거래소 정보를 추가했다.
+
+### 국장·미장 분리 및 통합
+
+- `marketCountry=KR`, `marketCountry=US`를 각각 수집한다.
+- Redis 캐시를 `market:ranking:kr:*`, `market:ranking:us:*`로 분리했다.
+- 통합 탭은 KR·US 데이터를 합친 뒤 상승률·하락률·거래대금 기준으로 재정렬한다.
+- 통합 순위를 1위부터 다시 부여하고 각 행에 시장을 표시한다.
+
+### 토스 데이터 기준 보정
+
+- 토스 웹 화면과 비교해 거래대금 랭킹은 `MARKET_TRADING_AMOUNT`와 `duration=realtime`을 사용하도록 수정했다.
+- 상승률·하락률은 API 제한에 따라 `duration=1d`를 사용한다.
+- 투자 유의 종목은 `excludeInvestmentCaution=false`로 포함한다.
+- 토스 웹과 API의 `rankedAt`, 조회 시점, 필터 차이로 순위가 달라질 수 있음을 확인했다.
+
+### 분야 분석 및 AI
+
+- `app/analytics.py`에 분야별 평균 등락률, 상승 비율, 거래대금 비중, 분야 점수를 구현했다.
+- `GET /api/v1/market-analysis?market=all|kr|us`를 추가했다.
+- `app/ai_summary.py`에 선택형 AI 요약을 추가했다.
+- `AI_API_KEY`가 없으면 로컬 수치 기반 요약을 사용하고, 키가 있으면 OpenAI 호환 Chat Completions API를 사용한다.
+- `sector_map.json`에 세부 분야와 복합 기업 가중치 구조를 추가했다.
+- 정확한 사업부문 자료가 준비될 때까지 `WEIGHTED_ANALYSIS_ENABLED=false`로 가중 분석을 보류했다.
+
+### 최종 검증
+
+- Python compile 검사 통과
+- FastAPI 라우트 확인:
+  - `/health`
+  - `/api/v1/market-trend`
+  - `/api/v1/market-analysis`
+  - `/market-trend`
+- 실제 KR·US 랭킹 수집 확인
+- 가중 분야 계산 모의 테스트 통과
+- AI 키 없이 fallback 요약 테스트 통과
+
+### 다음 재개 지점
+
+1. `sector_map.json`의 분야와 가중치를 공식 기업 자료로 보완한다.
+2. `WEIGHTED_ANALYSIS_ENABLED=true` 전환 전 분석 결과를 검토한다.
+3. 필요하면 실제 AI API 키를 `.env`에 추가한다.
+4. 테스트 코드를 별도 추가한다.

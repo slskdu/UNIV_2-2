@@ -11,6 +11,12 @@ class Settings(BaseSettings):
 
     # 랭킹 조회는 공식 단일 엔드포인트입니다.
     toss_ranking_path: str = "/api/v1/rankings"
+    toss_stocks_path: str = "/api/v1/stocks"
+    sector_map_path: str = "sector_map.json"
+    weighted_analysis_enabled: bool = False
+    ai_api_key: str | None = None
+    ai_model: str = "gpt-4o-mini"
+    ai_base_url: str = "https://api.openai.com/v1"
 
     # 공식 Ranking API의 query parameter 이름입니다.
     ranking_type_param: str = "type"
@@ -20,6 +26,7 @@ class Settings(BaseSettings):
     ranking_count_param: str = "count"
     ranking_market: str = "KR"
     ranking_duration: str = "1d"
+    ranking_realtime_duration: str = "realtime"
     ranking_exclude_investment_caution: bool = False
 
     redis_url: str = "redis://localhost:6379/0"

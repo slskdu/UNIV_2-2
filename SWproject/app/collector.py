@@ -3,34 +3,63 @@ import logging
 
 from .config import Settings
 from .redis_client import save_rankings
+from .sector_map import sector_for
 from .toss_api import TossApiClient
 
 logger = logging.getLogger(__name__)
 
-# 공식 문서의 RANKING 카테고리 한도는 초당 최대 5회입니다.
-# 실제 type 값은 OpenAPI 스키마에 맞춰 환경변수로 바꿀 수 있습니다.
 RANKING_TYPES = {
     "rising": "TOP_GAINERS",
     "falling": "TOP_LOSERS",
     "trading_value": "MARKET_TRADING_AMOUNT",
 }
+MARKETS = (("kr", "KR"), ("us", "US"))
 
 
 async def collect_once(api: TossApiClient, settings: Settings) -> None:
-    results = {}
-    for index, (cache_name, ranking_type) in enumerate(RANKING_TYPES.items()):
-        try:
-            results[cache_name] = await api.fetch_ranking(ranking_type)
-            logger.info("ranking collected: %s (%s)", cache_name, ranking_type)
-        except Exception:
-            logger.exception("ranking collection failed: %s", cache_name)
+    for market, market_country in MARKETS:
+        results = {}
+        for index, (cache_name, ranking_type) in enumerate(RANKING_TYPES.items()):
+            try:
+                duration = (
+                    settings.ranking_realtime_duration
+                    if ranking_type == "MARKET_TRADING_AMOUNT"
+                    else settings.ranking_duration
+                )
+                results[cache_name] = await api.fetch_ranking(
+                    ranking_type,
+                    market_country,
+                    duration,
+                )
+                logger.info("ranking collected: %s/%s (%s)", market, cache_name, ranking_type)
+            except Exception:
+                logger.exception("ranking collection failed: %s/%s", market, cache_name)
 
-        # 순차 호출 + 간격으로 1초 내 5회보다 훨씬 낮게 유지합니다.
-        if index < len(RANKING_TYPES) - 1:
-            await asyncio.sleep(settings.request_spacing_seconds)
+            if index < len(RANKING_TYPES) - 1:
+                await asyncio.sleep(settings.request_spacing_seconds)
 
-    if results:
-        await save_rankings(results)
+        if results:
+            try:
+                symbols = [
+                    row.get("symbol")
+                    for ranking in results.values()
+                    for row in ranking.get("result", {}).get("rankings", [])
+                    if isinstance(row, dict)
+                ]
+                stock_details = await api.fetch_stock_details(symbols)
+                for ranking in results.values():
+                    for row in ranking.get("result", {}).get("rankings", []):
+                        if isinstance(row, dict) and row.get("symbol") in stock_details:
+                            stock = stock_details[row["symbol"]]
+                            row["name"] = stock.get("name")
+                            row["sector"] = stock.get("securityType")
+                            row["market"] = stock.get("market")
+                            row["industry"] = sector_for(row)
+            except Exception:
+                logger.exception("stock name enrichment failed: %s", market)
+            await save_rankings(market, results)
+
+        await asyncio.sleep(settings.request_spacing_seconds)
 
 
 async def collector_loop(api: TossApiClient, settings: Settings) -> None:
