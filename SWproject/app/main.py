@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager, suppress
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api.routes import router
+from .api.routes import page_router, router
 from .collector import collector_loop
 from .config import get_settings
 from .redis_client import close_redis, redis
@@ -39,6 +39,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(router)
+app.include_router(page_router)
 
 
 @app.get("/health")

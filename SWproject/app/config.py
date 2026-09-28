@@ -11,20 +11,28 @@ class Settings(BaseSettings):
 
     # 랭킹 조회는 공식 단일 엔드포인트입니다.
     toss_ranking_path: str = "/api/v1/rankings"
+    toss_stocks_path: str = "/api/v1/stocks"
+    sector_map_path: str = "sector_map.json"
+    weighted_analysis_enabled: bool = False
+    ai_api_key: str | None = None
+    ai_model: str = "gpt-4o-mini"
+    ai_base_url: str = "https://api.openai.com/v1"
 
-    # 아래 값은 공식 OpenAPI 스키마의 실제 parameter 이름/허용 값에 맞춰 수정하세요.
-    # 예시 값: TOP_GAINERS, TOP_LOSERS, TRADING_VALUE
+    # 공식 Ranking API의 query parameter 이름입니다.
     ranking_type_param: str = "type"
     ranking_market_param: str = "marketCountry"
     ranking_duration_param: str = "duration"
-    ranking_limit_param: str = "limit"
+    ranking_exclude_caution_param: str = "excludeInvestmentCaution"
+    ranking_count_param: str = "count"
     ranking_market: str = "KR"
     ranking_duration: str = "1d"
+    ranking_realtime_duration: str = "realtime"
+    ranking_exclude_investment_caution: bool = False
 
     redis_url: str = "redis://localhost:6379/0"
     cache_ttl_seconds: int = 30
     collection_interval_seconds: int = 20
-    ranking_limit: int = 50
+    ranking_count: int = 50
     request_spacing_seconds: float = 0.25
     http_timeout_seconds: float = 10.0
     token_refresh_margin_seconds: int = 60
@@ -41,6 +49,10 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def safe_ranking_count(self) -> int:
+        return min(max(self.ranking_count, 1), 100)
 
 
 @lru_cache
