@@ -51,7 +51,16 @@ async def collect_once(api: TossApiClient, settings: Settings) -> None:
                     for row in ranking.get("result", {}).get("rankings", []):
                         if isinstance(row, dict) and row.get("symbol") in stock_details:
                             stock = stock_details[row["symbol"]]
-                            row["name"] = stock.get("name")
+                            stock_name = next(
+                                (
+                                    stock[field]
+                                    for field in ("name", "stockName", "companyName", "itemName")
+                                    if isinstance(stock.get(field), str) and stock[field].strip()
+                                ),
+                                None,
+                            )
+                            if stock_name:
+                                row["name"] = stock_name
                             row["sector"] = stock.get("securityType")
                             row["market"] = stock.get("market")
                             row["industry"] = sector_for(row)

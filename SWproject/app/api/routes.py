@@ -76,19 +76,19 @@ MARKET_TREND_PAGE = """<!doctype html>
             <button class="tab" data-kind="falling">하락률</button>
             <button class="tab" data-kind="trading_value">거래대금</button>
         </nav>
+        <section class="panel" style="margin-bottom: 18px; padding: 18px;"><strong>AI 데이터 요약</strong><p id="ai-summary" style="margin: 10px 0 0; color: #667085;">버튼을 누르면 현재 선택 시장을 분석합니다.</p><button id="ai-button" style="margin-top: 12px;">AI 요약 생성</button></section>
         <section class="analysis" aria-live="polite">
             <article class="analysis-card hot"><h2>현재 강세 분야</h2><div id="hot-sectors" class="analysis-list"><div class="empty">분석 중...</div></div></article>
             <article class="analysis-card caution"><h2>주의 분야</h2><div id="caution-sectors" class="analysis-list"><div class="empty">분석 중...</div></div></article>
             <div id="analysis-note" class="analysis-note"></div>
         </section>
         <section class="panel" style="margin-bottom: 18px;"><div class="table-wrap"><table>
+            <thead><tr><th>시장</th><th>순위</th><th>종목명</th><th>종목코드</th><th>분야</th><th>현재가</th><th>등락률</th><th>거래량</th><th>거래대금</th></tr></thead>
+            <tbody id="rows"><tr><td colspan="9" class="empty">데이터를 불러오는 중입니다.</td></tr></tbody>
+        </table></div></section>
+        <section class="panel" style="margin-bottom: 18px;"><div class="table-wrap"><table>
             <thead><tr><th>분야 순위</th><th>세부 분야</th><th>종목 수</th><th>평균 등락률</th><th>상승 비율</th><th>거래대금 비중</th><th>분야 점수</th><th>신호</th></tr></thead>
             <tbody id="sector-rows"><tr><td colspan="8" class="empty">분야 분석을 불러오는 중입니다.</td></tr></tbody>
-        </table></div></section>
-        <section class="panel" style="margin-bottom: 18px; padding: 18px;"><strong>AI 데이터 요약</strong><p id="ai-summary" style="margin: 10px 0 0; color: #667085;">버튼을 누르면 현재 선택 시장을 분석합니다.</p><button id="ai-button" style="margin-top: 12px;">AI 요약 생성</button></section>
-        <section class="panel"><div class="table-wrap"><table>
-            <thead><tr><th>시장</th><th>순위</th><th>종목/심볼</th><th>종목코드</th><th>분야</th><th>현재가</th><th>등락률</th><th>거래량</th><th>거래대금</th></tr></thead>
-            <tbody id="rows"><tr><td colspan="9" class="empty">데이터를 불러오는 중입니다.</td></tr></tbody>
         </table></div></section>
     </main>
     <script>
@@ -104,7 +104,10 @@ MARKET_TREND_PAGE = """<!doctype html>
         const labels = { rising: "상승률", falling: "하락률", trading_value: "거래대금" };
         function findValue(row, keys) {
             const source = Object.keys(row || {}).reduce((map, key) => (map[key.toLowerCase()] = row[key], map), {});
-            for (const key of keys) if (source[key.toLowerCase()] !== undefined) return source[key.toLowerCase()];
+            for (const key of keys) {
+                const value = source[key.toLowerCase()];
+                if (value !== undefined && value !== null && !(typeof value === "string" && !value.trim())) return value;
+            }
             return "-";
         }
         function findArray(value) {
@@ -169,10 +172,12 @@ MARKET_TREND_PAGE = """<!doctype html>
                 const rate = fieldValue(row, "rate", aliases.rate); const numericRate = Number(String(rate).replace(/[^0-9.-]/g, ""));
                 const rateClass = numericRate > 0 ? "positive" : numericRate < 0 ? "negative" : "";
                 const symbol = findValue(row, ["symbol"]); const displayName = findValue(row, aliases.name);
-                const code = displayName === symbol ? "-" : findValue(row, aliases.code);
                 const marketLabel = row.__market || selectedMarket.toUpperCase();
                 const sector = row.industry || (row.sector && row.market ? `${row.sector} · ${row.market}` : row.sector || row.market || "-");
-                return `<tr><td class="code">${marketLabel}</td><td class="rank">${rank}</td><td class="name">${displayName}</td><td class="code">${code}</td><td>${sector}</td><td>${numberText(fieldValue(row, "price", aliases.price))}</td><td class="${rateClass}">${rateText(rate)}</td><td>${numberText(fieldValue(row, "volume", aliases.volume))}</td><td>${numberText(fieldValue(row, "amount", aliases.amount))}</td></tr>`;
+                const sectorValues = [sector, row.sector, row.industry, row.market, row.securityType];
+                const stockName = displayName !== "-" && !sectorValues.includes(displayName) ? displayName : symbol;
+                const code = stockName === symbol ? "-" : findValue(row, aliases.code);
+                return `<tr><td class="code">${marketLabel}</td><td class="rank">${rank}</td><td class="name">${stockName}</td><td class="code">${code}</td><td>${sector}</td><td>${numberText(fieldValue(row, "price", aliases.price))}</td><td class="${rateClass}">${rateText(rate)}</td><td>${numberText(fieldValue(row, "volume", aliases.volume))}</td><td>${numberText(fieldValue(row, "amount", aliases.amount))}</td></tr>`;
             }).join("");
         }
         async function load() {
