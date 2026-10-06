@@ -1,0 +1,45 @@
+{
+  "source": "Yahoo Finance search sector metadata; VJET classified from SEC Form 8-K dated 2026-10-05",
+  "as_of": "2026-10-06",
+  "sectors": {
+    "정보기술": [
+      "AAOI", "AAPL", "AGMH", "AIFA", "AIXI", "ALAB", "AMAT", "AMD", "AMOD", "ARBB", "ASML", "ATHR", "AUUD", "AVGO", "BGIN", "BRUN", "BZAI", "CBRS", "COHR", "CRDO", "CRWV", "CRWD", "DELL", "FRGT", "FUSE", "GLE", "HLSQ", "INTC", "LITE", "LRCX", "MSTR", "MRVL", "MSFT", "MU", "NSTR", "NOW", "NVDA", "OLB", "ORCL", "PANW", "PLTR", "QTEX", "RCT", "RPGL", "SGRX", "SHOP", "SKHY", "SNDK", "STX", "TSM", "VEEA", "WCT", "WDC", "WQEY"
+    ],
+    "산업재": [
+      "AIRI", "APOG", "BCHT", "BE", "CCTG", "CDTG", "CDZIP", "CIRC", "DXST", "FGL", "GCDT", "GEV", "GNTA", "GP", "IPDN", "IVDA", "JYD", "LNKS", "NXAT", "OFAL", "OIO", "OLOX", "RKLB", "RUBI", "SAIQ", "SDST", "SGLY", "SPCX", "TRSG", "VJET", "YFOR"
+    ],
+    "헬스케어": [
+      "APUS", "AVBP", "BEAT", "BNR", "CMMB", "DNA", "EDSA", "EOCN", "ERNA", "EXOZ", "FTRE", "GDTC", "HSCS", "HYFT", "IBO", "ICU", "ITOC", "JAGX", "MRNA", "NAUT", "NIVF", "OPCH", "PACB", "PCVX", "PRME", "SCNX", "SXTP"
+    ],
+    "금융": [
+      "AXG", "HFBL", "HOOD", "MEGL", "OFS", "RCG", "RFAI", "SDEV", "XHG", "XRPN", "ZSTK"
+    ],
+    "커뮤니케이션": [
+      "GCL", "GIBO", "GOOG", "GOOGL", "IOTR", "LCFY", "META", "NBIS", "NFLX", "XHLD", "ZNB"
+    ],
+    "경기소비재": [
+      "AMZN", "DCX", "MI", "MRM", "REBN", "SEGG", "SSM", "TSLA", "WKSP"
+    ],
+    "필수소비재": [
+      "EEIQ", "GNLN", "PFAI", "STKH", "TAP.A", "WMT"
+    ],
+    "유틸리티": [
+      "CEG", "ONEN", "VST"
+    ],
+    "소재": [
+      "LIN", "RETO", "VHI"
+    ],
+    "부동산": [
+      "AEI", "CMCT", "GIPR", "WHLRP"
+    ],
+    "에너지": [
+      "GLND", "STAK"
+    ],
+    "ETF/ETN": [
+      "AAOG", "AAOX", "AAOZ", "ASTN", "ASTX", "ASUP", "CEGX", "DPU", "FB", "FLYT", "IWM", "LABX", "OND", "PLU", "QQQ", "QQQM", "SGOV", "SMH", "SOXL", "SOXX", "SPY", "TQQQ", "TSEG", "VOO", "VSTL", "WTIU", "WZRD"
+    ],
+    "분야 확인 필요": [
+      "TBCV"
+    ]
+  }
+}

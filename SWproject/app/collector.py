@@ -3,7 +3,7 @@ import logging
 
 from .config import Settings
 from .redis_client import save_rankings
-from .sector_map import sector_for
+from .sector_map import load_sector_map, sector_for
 from .toss_api import TossApiClient
 
 logger = logging.getLogger(__name__)
@@ -47,10 +47,31 @@ async def collect_once(api: TossApiClient, settings: Settings) -> None:
                     if isinstance(row, dict)
                 ]
                 stock_details = await api.fetch_stock_details(symbols)
+                sector_map = load_sector_map()
+                missing_sector_symbols = sorted({
+                    symbol
+                    for symbol, stock in stock_details.items()
+                    if market_country in {"KR", "US"}
+                    and symbol not in sector_map
+                    and stock.get("securityType") not in {"ETF", "ETN"}
+                })
+                public_sectors = await asyncio.gather(
+                    *(
+                        api.fetch_public_sector(
+                            symbol,
+                            market_country,
+                            stock_details[symbol].get("market"),
+                        )
+                        for symbol in missing_sector_symbols
+                    )
+                )
+                external_sectors = dict(zip(missing_sector_symbols, public_sectors))
                 for ranking in results.values():
                     for row in ranking.get("result", {}).get("rankings", []):
-                        if isinstance(row, dict) and row.get("symbol") in stock_details:
-                            stock = stock_details[row["symbol"]]
+                        if isinstance(row, dict):
+                            symbol = row.get("symbol")
+                            row["marketCountry"] = market_country
+                            stock = stock_details.get(symbol, {})
                             stock_name = next(
                                 (
                                     stock[field]
@@ -63,6 +84,8 @@ async def collect_once(api: TossApiClient, settings: Settings) -> None:
                                 row["name"] = stock_name
                             row["sector"] = stock.get("securityType")
                             row["market"] = stock.get("market")
+                            if external_sectors.get(symbol):
+                                row["externalSector"] = external_sectors[symbol]
                             row["industry"] = sector_for(row)
             except Exception:
                 logger.exception("stock name enrichment failed: %s", market)

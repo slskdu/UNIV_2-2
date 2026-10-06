@@ -19,6 +19,8 @@ class TossApiClient:
             base_url=settings.toss_api_base_url.rstrip("/"),
             timeout=settings.http_timeout_seconds,
         )
+        self._public_sector_cache: dict[str, str | None] = {}
+        self._sector_lookup_semaphore = asyncio.Semaphore(4)
 
     async def close(self) -> None:
         await self.client.aclose()
@@ -64,6 +66,50 @@ class TossApiClient:
     async def fetch_stock_names(self, symbols: list[str]) -> dict[str, str]:
         details = await self.fetch_stock_details(symbols)
         return {symbol: stock["name"] for symbol, stock in details.items() if stock.get("name")}
+
+    async def fetch_public_sector(
+        self,
+        symbol: str,
+        market_country: str = "US",
+        exchange: str | None = None,
+    ) -> str | None:
+        suffix = {"KOSPI": ".KS", "KOSDAQ": ".KQ"}.get(exchange)
+        queries = (
+            [f"{symbol}{suffix}"]
+            if market_country == "KR" and suffix
+            else [f"{symbol}.KS", f"{symbol}.KQ"]
+            if market_country == "KR"
+            else [symbol]
+        )
+        cache_key = f"{market_country}:{exchange or ''}:{symbol.upper()}"
+        if cache_key in self._public_sector_cache:
+            return self._public_sector_cache[cache_key]
+
+        async with self._sector_lookup_semaphore:
+            if cache_key in self._public_sector_cache:
+                return self._public_sector_cache[cache_key]
+            sector = None
+            for query in queries:
+                try:
+                    response = await self.client.get(
+                        "https://query1.finance.yahoo.com/v1/finance/search",
+                        params={"q": query, "quotesCount": 5, "newsCount": 0},
+                        headers={"User-Agent": "Mozilla/5.0"},
+                    )
+                    response.raise_for_status()
+                    quotes = response.json().get("quotes", [])
+                    quote = next(
+                        (item for item in quotes if item.get("symbol", "").upper() == query.upper()),
+                        {},
+                    )
+                    sector = quote.get("sectorDisp") or quote.get("sector")
+                except (httpx.HTTPError, ValueError):
+                    continue
+                if sector:
+                    break
+
+            self._public_sector_cache[cache_key] = sector
+            return sector
 
     async def fetch_stock_details(self, symbols: list[str]) -> dict[str, dict[str, Any]]:
         unique_symbols = list(dict.fromkeys(symbol for symbol in symbols if symbol))
