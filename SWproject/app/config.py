@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     ai_api_key: str | None = None
     ai_model: str = "gpt-4o-mini"
     ai_base_url: str = "https://api.openai.com/v1"
+    # AI_MODEL이 과부하·한도 초과일 때 차례로 시도할 예비 모델(쉼표 구분).
+    ai_fallback_models: str = ""
 
     # 공식 Ranking API의 query parameter 이름입니다.
     ranking_type_param: str = "type"
@@ -49,6 +51,10 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def ai_fallback_model_list(self) -> list[str]:
+        return [model.strip() for model in self.ai_fallback_models.split(",") if model.strip()]
 
     @property
     def safe_ranking_count(self) -> int:

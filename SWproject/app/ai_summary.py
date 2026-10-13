@@ -1,9 +1,7 @@
 import json
 from typing import Any
 
-import httpx
-
-from .config import get_settings
+from .ai_client import ai_enabled, chat_completion
 
 
 def fallback_summary(analysis: dict[str, Any]) -> str:
@@ -104,8 +102,7 @@ def brief_summary(analysis: dict[str, Any]) -> str:
 
 
 async def create_summary(analysis: dict[str, Any]) -> str:
-    settings = get_settings()
-    if not settings.ai_api_key:
+    if not ai_enabled():
         return fallback_summary(analysis)
 
     context = {
@@ -125,16 +122,4 @@ async def create_summary(analysis: dict[str, Any]) -> str:
         "랭킹 표본 기반 분석이며 투자 판단을 대신하지 않는다고 적으세요.\n"
         + json.dumps(context, ensure_ascii=False)
     )
-    async with httpx.AsyncClient(timeout=settings.http_timeout_seconds) as client:
-        response = await client.post(
-            f"{settings.ai_base_url.rstrip('/')}/chat/completions",
-            headers={"Authorization": f"Bearer {settings.ai_api_key}"},
-            json={
-                "model": settings.ai_model,
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.2,
-            },
-        )
-        response.raise_for_status()
-        payload = response.json()
-        return payload["choices"][0]["message"]["content"].strip()
+    return await chat_completion([{"role": "user", "content": prompt}], timeout=30.0)

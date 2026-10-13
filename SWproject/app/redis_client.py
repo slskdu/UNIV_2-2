@@ -1,6 +1,6 @@
 import asyncio
 import json
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from redis.asyncio import Redis
 
@@ -23,6 +23,16 @@ async def set_json(key: str, value: Any, ttl: int) -> None:
 async def get_json(key: str) -> Any | None:
     raw = await redis.get(key)
     return json.loads(raw) if raw else None
+
+
+async def cached_json(key: str, ttl: int, loader: Callable[[], Awaitable[Any]]) -> Any:
+    """캐시에 있으면 그대로 반환하고, 없으면 loader 결과를 ttl초 동안 저장합니다."""
+    value = await get_json(key)
+    if value is None:
+        value = await loader()
+        if value is not None:
+            await set_json(key, value, ttl)
+    return value
 
 
 async def save_rankings(market: str, rankings: dict[str, Any]) -> None:
