@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import re
@@ -9,6 +10,12 @@ from .ai_client import ai_enabled, chat_completion
 logger = logging.getLogger(__name__)
 
 POSITIVE, NEGATIVE, NEUTRAL = "호재", "악재", "중립"
+UNRELATED = "무관"  # 해당 종목·분야 주가와 관계없는 기사. 호재/악재 비율 계산에서 뺍니다.
+# AI가 고르는 라벨 → (논조, 점수). 점수 ±2는 강한 호재/악재입니다.
+AI_LABELS: dict[str, tuple[str, int]] = {
+    "강한 호재": (POSITIVE, 2), "호재": (POSITIVE, 1), "중립": (NEUTRAL, 0),
+    "악재": (NEGATIVE, -1), "강한 악재": (NEGATIVE, -2), "무관": (UNRELATED, 0),
+}
 AI_TIMEOUT_SECONDS = 30.0
 
 # 기사 제목에서 찾는 표현과 점수(+ 호재, - 악재). 긴 표현을 먼저 찾아 지운 뒤 짧은 표현을 찾으므로
@@ -29,6 +36,11 @@ TONE_KEYWORDS: dict[str, int] = {
     "공급계약": 1, "계약 체결": 1, "유상증자": -1, "무상증자": 1,
     "상장폐지": -2, "거래정지": -2, "압수수색": -2, "투자경고": -1, "투자주의": -1,
     "차익실현": -1, "피크아웃": -1, "사이드카": -1,
+    "대규모 수주": 2, "최대 수주": 2, "점유율 확대": 1, "점유율 하락": -1, "투자 확대": 1,
+    "가이던스 상향": 2, "가이던스 하향": -2, "전망치 상회": 2, "전망치 하회": -2,
+    "수출 통제": -2, "수출통제": -2, "수출 규제": -2, "공급 차질": -2, "생산 차질": -2,
+    "매수 추천": 1, "비중 확대": 1, "비중 축소": -1, "기대감": 1,
+    "청신호": 1, "훈풍": 1, "날개": 1, "질주": 1, "적신호": -1, "빨간불": -1, "경고등": -1, "먹구름": -1,
     # 단일 표현
     "급등": 2, "폭등": 2, "강세": 1, "상승": 1, "반등": 1, "돌파": 1, "호재": 2, "수혜": 1,
     "수주": 1, "흑자": 1, "호조": 1, "성장": 1, "승인": 1, "허가": 1, "상향": 1, "회복": 1,
@@ -36,6 +48,9 @@ TONE_KEYWORDS: dict[str, int] = {
     "적자": -1, "손실": -1, "하향": -1, "우려": -1, "둔화": -1, "감소": -1, "리콜": -2,
     "소송": -1, "제재": -1, "과징금": -2, "횡령": -2, "배임": -2, "파업": -1, "해킹": -2,
     "화재": -1, "경고": -1, "불확실": -1, "공매도": -1, "반토막": -2,
+    "매진": 1, "완판": 1, "급증": 1, "최고치": 2, "상회": 1, "웃돌": 1, "증설": 1, "양산": 1, "확보": 1,
+    "급감": -2, "최저치": -2, "추락": -2, "하회": -1, "밑돌": -1, "철회": -1, "취소": -1,
+    "지연": -1, "연기": -1, "차질": -1, "결함": -2, "벌금": -2, "주춤": -1, "털썩": -1,
 }
 # 해외 종목의 영문 제목용. 소문자로 바꾼 제목에서 단어 단위로 찾습니다.
 TONE_KEYWORDS_EN: dict[str, int] = {
@@ -51,6 +66,11 @@ TONE_KEYWORDS_EN: dict[str, int] = {
     "sink": -1, "sinks": -1, "decline": -1, "declines": -1, "lawsuit": -1, "probe": -1, "recall": -2,
     "layoffs": -1, "warning": -1, "warns": -1, "bearish": -1, "underperform": -1, "selloff": -1,
     "sell-off": -1, "delisting": -2, "bankruptcy": -2, "fraud": -2, "dilution": -1, "offering": -1,
+    "raises guidance": 2, "raised guidance": 2, "cuts guidance": -2, "lowers guidance": -2,
+    "export controls": -2, "export curbs": -2, "record revenue": 2, "strong demand": 1,
+    "soaring": 2, "surging": 2, "boost": 1, "boosts": 1, "exceeds": 1, "upbeat": 1, "partnership": 1,
+    "plummet": -2, "plummets": -2, "rout": -2, "slashes": -1, "delay": -1, "delays": -1,
+    "halt": -1, "halts": -1, "ban": -1, "fined": -2, "shortage": -1,
 }
 _TONE_ORDER = sorted(TONE_KEYWORDS, key=len, reverse=True)
 _TONE_ORDER_EN = sorted(TONE_KEYWORDS_EN, key=len, reverse=True)
@@ -110,6 +130,7 @@ def classify_title(title: str) -> dict[str, Any]:
     return {
         "tone": POSITIVE if score > 0 else NEGATIVE if score < 0 else NEUTRAL,
         "tone_score": score,
+        "tone_strong": abs(score) >= 2,
         "tone_keywords": matched,
         "category": category,
     }
@@ -129,10 +150,15 @@ def classify_articles(articles: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def build_digest(articles: list[dict[str, Any]], subject: str, days: int) -> dict[str, Any]:
     """분류된 기사 묶음의 호재/악재 비율과 사건 유형을 요약합니다."""
     counts = Counter(article["tone"] for article in articles)
-    positive, negative, neutral = counts[POSITIVE], counts[NEGATIVE], counts[NEUTRAL]
+    positive, negative, neutral, unrelated = counts[POSITIVE], counts[NEGATIVE], counts[NEUTRAL], counts[UNRELATED]
     total = len(articles)
-    balance = (positive - negative) / total if total else 0.0
-    if total < 3:
+    # 주가와 무관한 기사는 논조 판단에서 뺍니다.
+    relevant_articles = [article for article in articles if article["tone"] != UNRELATED]
+    relevant = len(relevant_articles)
+    strong_positive = sum(1 for a in relevant_articles if a["tone"] == POSITIVE and a.get("tone_strong"))
+    strong_negative = sum(1 for a in relevant_articles if a["tone"] == NEGATIVE and a.get("tone_strong"))
+    balance = (positive - negative) / relevant if relevant else 0.0
+    if relevant < 3:
         tone = "판단 보류"
     elif balance >= 0.2:
         tone = "호재 우위"
@@ -141,19 +167,23 @@ def build_digest(articles: list[dict[str, Any]], subject: str, days: int) -> dic
     else:
         tone = "혼재"
 
-    categories = Counter(article["category"] for article in articles).most_common(3)
+    categories = Counter(article["category"] for article in relevant_articles).most_common(3)
     top_positive = [a["title"] for a in sorted(articles, key=lambda a: -a["tone_score"]) if a["tone"] == POSITIVE][:2]
     top_negative = [a["title"] for a in sorted(articles, key=lambda a: a["tone_score"]) if a["tone"] == NEGATIVE][:2]
 
     if not total:
         text = f"최근 {days}일간 {subject} 관련 기사를 찾지 못했습니다."
     else:
-        category_text = ", ".join(f"{name} {count}건" for name, count in categories)
+        category_text = ", ".join(f"{name} {count}건" for name, count in categories) or "없음"
+        excluded = f"(주가와 무관한 {unrelated}건 제외) " if unrelated else ""
+        strong = [f"강한 호재 {strong_positive}건"] * bool(strong_positive) + [f"강한 악재 {strong_negative}건"] * bool(strong_negative)
         text = (
-            f"최근 {days}일 {subject} 관련 기사 {total}건 중 호재 {positive}건·악재 {negative}건·"
-            f"중립 {neutral}건으로 기사 논조는 '{tone}'입니다. 주된 사건 유형은 {category_text}입니다."
+            f"최근 {days}일 {subject} 관련 기사 {relevant}건{excluded}중 호재 {positive}건·악재 {negative}건·"
+            f"중립 {neutral}건으로 기사 논조는 '{tone}'입니다."
+            + (f" 이 중 {'·'.join(strong)}입니다." if strong else "")
+            + f" 주된 사건 유형은 {category_text}입니다."
         )
-        if total < 3:
+        if relevant < 3:
             text += " 기사 수가 적어 논조를 판단하기 어렵습니다."
 
     return {
@@ -161,6 +191,10 @@ def build_digest(articles: list[dict[str, Any]], subject: str, days: int) -> dic
         "positive": positive,
         "negative": negative,
         "neutral": neutral,
+        "unrelated": unrelated,
+        "relevant_count": relevant,
+        "strong_positive": strong_positive,
+        "strong_negative": strong_negative,
         "balance": round(balance, 3),
         "tone": tone,
         "categories": [{"category": name, "count": count} for name, count in categories],
@@ -184,45 +218,127 @@ def tone_price_signal(digest: dict[str, Any], change_rate: float | None, period_
     return f"기사 논조({digest['tone']})와 {rate_text}의 방향이 일치합니다."
 
 
+AI_BATCH_SIZE = 20  # 한 번에 너무 많이 보내면 AI가 제목 일부를 빠뜨려 개수가 어긋납니다.
+AI_CONCURRENCY = 2
+
+
+def merge_ai_labels(
+    classified: list[dict[str, Any]],
+    batch_labels: list[list[str] | None],
+    batch_size: int = AI_BATCH_SIZE,
+) -> tuple[list[dict[str, Any]], int]:
+    """묶음별 AI 판정을 기사에 붙입니다. 실패했거나 개수가 맞지 않는 묶음은 규칙 기반 판정을 그대로 둡니다.
+
+    돌려주는 두 번째 값은 AI 판정이 들어간 기사 수입니다.
+    """
+    merged: list[dict[str, Any]] = []
+    covered = 0
+    for index, article in enumerate(classified):
+        labels = batch_labels[index // batch_size] if index // batch_size < len(batch_labels) else None
+        label = labels[index % batch_size] if labels else None
+        if label in AI_LABELS:
+            covered += 1
+            tone, score = AI_LABELS[label]
+            # AI 판정에는 규칙의 근거 표현을 붙이지 않습니다(판정과 어긋나 보일 수 있음).
+            merged.append({
+                **article, "tone": tone, "tone_score": score, "tone_strong": abs(score) >= 2,
+                "tone_keywords": [], "tone_source": "ai",
+            })
+        else:
+            merged.append({**article, "tone_source": "rule"})
+    return merged, covered
+
+
 async def classify_and_digest(
     articles: list[dict[str, Any]],
     subject: str,
     days: int,
+    with_summary: bool = True,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """규칙 기반 분류를 기본으로 하고, AI_API_KEY가 있으면 AI 분류·요약으로 보강합니다."""
-    classified = classify_articles(articles)
+    """규칙 기반 분류를 기본으로 하고, AI_API_KEY가 있으면 AI 분류·요약으로 보강합니다.
+
+    AI 분류는 AI_BATCH_SIZE개씩 나눠 요청하고, 실패한 묶음만 규칙 기반 판정으로 남깁니다.
+    digest의 method는 실제로 AI 판정이 들어간 비율에 따라 ai / ai_partial / rule이 됩니다.
+    """
+    classified = [{**article, "tone_source": "rule"} for article in classify_articles(articles)]
     digest = build_digest(classified, subject, days)
     if not ai_enabled() or not classified:
         return classified, digest
 
-    try:
-        ai_result = await _ai_classify(classified, subject, days)
-        labels = ai_result.get("labels", [])
-        if len(labels) == len(classified) and all(label in {POSITIVE, NEGATIVE, NEUTRAL} for label in labels):
-            classified = [
-                {**article, "tone": label, "tone_score": {POSITIVE: 1, NEGATIVE: -1, NEUTRAL: 0}[label]}
-                for article, label in zip(classified, labels)
-            ]
-            digest = build_digest(classified, subject, days)
-        summary = str(ai_result.get("summary") or "").strip()
-        if summary:
-            digest["summary"] = summary
-        digest["method"] = "ai"
-    except Exception:
-        logger.exception("AI news classification failed; using rule-based result")
+    titles = [article.get("title_ko") or article["title"] for article in classified]
+    batches = [titles[index:index + AI_BATCH_SIZE] for index in range(0, len(titles), AI_BATCH_SIZE)]
+    semaphore = asyncio.Semaphore(AI_CONCURRENCY)
+
+    async def label_batch(batch: list[str]) -> list[str] | None:
+        async with semaphore:
+            try:
+                labels = await _ai_labels(batch, subject)
+            except Exception:
+                logger.exception("AI news classification batch failed")
+                return None
+        if len(labels) != len(batch):
+            logger.warning("AI returned %d labels for %d titles; using rules for this batch", len(labels), len(batch))
+            return None
+        return labels
+
+    async def summarize() -> str:
+        if not with_summary:
+            return ""
+        try:
+            return await _ai_digest_summary(titles, subject, days)
+        except Exception:
+            logger.exception("AI news summary failed")
+            return ""
+
+    batch_labels, summary = await asyncio.gather(
+        asyncio.gather(*(label_batch(batch) for batch in batches)), summarize()
+    )
+    classified, covered = merge_ai_labels(classified, list(batch_labels))
+    digest = build_digest(classified, subject, days)
+    if summary:
+        digest["summary"] = summary
+    digest["ai_coverage"] = round(covered / len(classified), 3)
+    digest["method"] = "ai" if covered == len(classified) else "ai_partial" if covered else "rule"
+    if covered and covered < len(classified):
+        digest["caveat"] = (
+            f"{len(classified)}건 중 {covered}건은 AI, 나머지는 제목 표현 규칙으로 분류했습니다. "
+            "본문 내용이나 주가 변동의 원인을 확정하지 않습니다."
+        )
+    elif covered:
+        digest["caveat"] = "AI가 제목만 보고 분류한 결과입니다. 본문 내용이나 주가 변동의 원인을 확정하지 않습니다."
     return classified, digest
 
 
-async def _ai_classify(articles: list[dict[str, Any]], subject: str, days: int) -> dict[str, Any]:
-    titles = [article.get("title_ko") or article["title"] for article in articles]
+async def _ai_labels(titles: list[str], subject: str) -> list[str]:
+    numbered = "\n".join(f"{index + 1}. {title}" for index, title in enumerate(titles))
     prompt = (
-        f"다음은 최근 {days}일간 '{subject}' 관련 기사 제목 목록입니다. 각 제목이 '{subject}' 주가에 "
-        "호재인지 악재인지 중립인지 제목에 드러난 사실만으로 분류하고, 전체 흐름을 한국어 3~4문장으로 "
-        "요약하세요. 제목에 없는 사실이나 전망은 만들지 말고, 기사가 주가 변동의 원인이라고 단정하지 마세요. "
-        'JSON으로만 답하세요: {"labels": ["호재"|"악재"|"중립", ...제목 순서대로], "summary": "..."}\n'
-        + json.dumps(titles, ensure_ascii=False)
+        f"아래 {len(titles)}개 기사 제목 각각이 '{subject}' 주가에 어떤 영향을 주는 소식인지 분류하세요.\n"
+        "- 강한 호재: 어닝 서프라이즈, 대형 수주·공급 계약, 목표가 대폭 상향, 사상 최고가처럼 주가에 크게 긍정적인 소식\n"
+        "- 호재: 수요 증가, 신제품·증설, 협력, 규제 완화, 완만한 주가 상승 등 긍정적인 소식\n"
+        "- 악재: 경쟁 심화, 비용 증가, 지연·차질, 완만한 주가 하락 등 부정적인 소식\n"
+        "- 강한 악재: 실적 쇼크, 제재·수출 통제, 대형 소송·사고, 목표가 대폭 하향, 급락처럼 크게 부정적인 소식\n"
+        f"- 중립: '{subject}'의 사업·주가와 관련은 있지만 좋고 나쁨을 가를 수 없는 소식(단순 시황 나열, 일정 안내 등)\n"
+        f"- 무관: '{subject}'의 사업·주가와 거의 관계없는 소식(인물 동정, 결혼·연예, 사회공헌, 이름만 스친 기사, 차트·시세표 페이지)\n"
+        "제목에 드러난 사실만 보되, 판단이 조금이라도 기운 쪽이 있으면 중립 대신 호재·악재를 고르세요. "
+        "다른 회사 소식은 그것이 이 종목에 미치는 영향(경쟁사 호재는 보통 악재)으로 판단하세요.\n"
+        f'JSON으로만 답하세요: {{"labels": [제목 순서대로 "강한 호재"|"호재"|"중립"|"악재"|"강한 악재"|"무관" 정확히 {len(titles)}개]}}\n\n'
+        + numbered
     )
     answer = await chat_completion(
         [{"role": "user", "content": prompt}], temperature=0.1, json_mode=True, timeout=AI_TIMEOUT_SECONDS
     )
-    return json.loads(answer)
+    labels = json.loads(answer).get("labels", [])
+    return [str(label).strip() for label in labels] if isinstance(labels, list) else []
+
+
+async def _ai_digest_summary(titles: list[str], subject: str, days: int) -> str:
+    prompt = (
+        f"다음은 최근 {days}일간 '{subject}' 관련 기사 제목 목록입니다. 전체 흐름을 한국어 3~4문장으로 요약하세요. "
+        "제목에 없는 사실이나 전망은 만들지 말고, 기사가 주가 변동의 원인이라고 단정하지 마세요. "
+        '요약문만 JSON으로 답하세요: {"summary": "..."}\n'
+        + json.dumps(titles, ensure_ascii=False)
+    )
+    answer = await chat_completion(
+        [{"role": "user", "content": prompt}], temperature=0.2, json_mode=True, timeout=AI_TIMEOUT_SECONDS
+    )
+    return str(json.loads(answer).get("summary") or "").strip()

@@ -161,7 +161,7 @@ MARKET_TREND_PAGE = """<!doctype html>
                     <input id="history-symbol" type="text" value="KOSPI" maxlength="15" aria-label="종목코드 또는 티커">
                     <input id="history-start" type="date" aria-label="시작일"><input id="history-end" type="date" aria-label="종료일">
                     <button type="submit">조회</button>
-                    <button type="button" class="ghost range-button" data-days="30">1개월</button><button type="button" class="ghost range-button" data-days="90">3개월</button><button type="button" class="ghost range-button" data-days="180">6개월</button><button type="button" class="ghost range-button" data-days="365">1년</button>
+                    <button type="button" class="ghost range-button" data-days="30">30일</button><button type="button" class="ghost range-button" data-days="90">90일</button><button type="button" class="ghost range-button" data-days="180">180일</button><button type="button" class="ghost range-button" data-days="365">1년</button>
                 </form>
             </div>
             <div class="pad"><div id="quick-picks" style="margin-bottom: 14px;"></div><div id="history-result" class="empty">조회할 종목과 기간을 선택하세요.</div><div id="history-news"></div></div>
@@ -174,7 +174,7 @@ MARKET_TREND_PAGE = """<!doctype html>
             </div>
             <div class="pad" style="padding-bottom: 6px;"><div id="flow-summary" class="signal">분야 흐름을 불러오는 중입니다.</div></div>
             <div class="table-wrap"><table class="flow-table">
-                <thead><tr><th>분야</th><th>1일</th><th>1주</th><th>1개월</th><th>3개월</th><th>거래대금</th><th>흐름 단계</th></tr></thead>
+                <thead><tr><th>분야</th><th>1일</th><th>1주</th><th title="장이 열린 날 기준 20일">20일</th><th title="장이 열린 날 기준 60일">60일</th><th>거래대금</th><th>흐름 단계</th></tr></thead>
                 <tbody id="flow-rows"><tr><td colspan="7" class="empty">불러오는 중입니다. 서버 시작 직후에는 10초쯤 걸립니다.</td></tr></tbody>
             </table></div>
             <div class="pad" id="sector-report"></div>
@@ -387,49 +387,128 @@ MARKET_TREND_PAGE = """<!doctype html>
             const text = Number(value).toLocaleString("ko-KR", { maximumFractionDigits: 2 });
             return currency === "KRW" ? `${text}원` : currency === "USD" ? `$${text}` : text;
         }
-        function toneChip(tone) {
-            return `<span class="chip ${tone === "호재" ? "pos" : tone === "악재" ? "neg" : ""}">${escapeHtml(tone)}</span>`;
+        function toneChip(tone, strong) {
+            const style = tone === "무관" ? ' style="opacity:.6"' : strong ? ' style="font-weight:700"' : "";
+            return `<span class="chip tone-chip ${tone === "호재" ? "pos" : tone === "악재" ? "neg" : ""}"${style}>${strong ? "강한 " : ""}${escapeHtml(tone)}</span>`;
+        }
+        const AI_TONES = { "강한 호재": ["호재", true], "호재": ["호재", false], "중립": ["중립", false], "악재": ["악재", false], "강한 악재": ["악재", true], "무관": ["무관", false] };
+        function refreshFilterCounts(list) {
+            const filters = list?.previousElementSibling;
+            if (!filters?.classList.contains("news-filters")) return;
+            const items = [...list.querySelectorAll("li")];
+            filters.querySelectorAll(".news-filter").forEach(button => {
+                const total = button.dataset.tone ? items.filter(item => item.dataset.tone === button.dataset.tone).length : items.length;
+                button.textContent = button.textContent.replace(/[0-9]+$/, total);
+            });
         }
         function newsMarkup(articles) {
             if (!articles.length) return '<p class="analysis-meta" style="text-align:left">조건에 맞는 기사를 찾지 못했습니다.</p>';
             const count = tone => articles.filter(article => article.tone === tone).length;
             const countries = [...new Set(articles.map(article => article.country || "한국"))];
             const countryNote = countries.length > 1 ? `<div class="code" style="margin-bottom:8px">수집 국가: ${countries.map(country => `${escapeHtml(country)} ${articles.filter(article => (article.country || "한국") === country).length}건`).join(" · ")}</div>` : "";
-            const filters = `${countryNote}<div class="chip-row news-filters" style="margin-bottom:10px">${[["", "전체", articles.length], ["호재", "호재", count("호재")], ["악재", "악재", count("악재")], ["중립", "중립", count("중립")]].map(([tone, label, total], index) => `<button type="button" class="ghost news-filter${index ? "" : " active"}" data-tone="${tone}">${label} ${total}</button>`).join("")}</div>`;
+            const filters = `${countryNote}<div class="chip-row news-filters" style="margin-bottom:10px">${[["", "전체", articles.length], ["호재", "호재", count("호재")], ["악재", "악재", count("악재")], ["중립", "중립", count("중립")], ["무관", "무관", count("무관")]].map(([tone, label, total], index) => `<button type="button" class="ghost news-filter${index ? "" : " active"}" data-tone="${tone}">${label} ${total}</button>`).join("")}</div>`;
             return `${filters}<ul class="news-list">${articles.map(article => {
                 const url = String(article.url || "");
                 const safeUrl = url.startsWith("https://") ? escapeHtml(url) : "#";
                 const similar = article.similar_count ? ` · 유사 기사 ${article.similar_count}건` : "";
                 const evidence = article.tone_keywords?.length ? ` · 근거 표현: ${escapeHtml(article.tone_keywords.join(", "))}` : "";
-                return `<li data-tone="${escapeHtml(article.tone)}" data-url="${safeUrl}"><div class="chip-row">${toneChip(article.tone)}<span class="chip">${escapeHtml(article.category)}</span><a href="${safeUrl}" target="_blank" rel="noopener noreferrer"${article.title_ko ? ` title="${escapeHtml(article.title)}"` : ""}>${escapeHtml(article.title_ko || article.title)}</a>${article.title_ko ? '<span class="chip">번역</span>' : ""}</div><div class="code" style="margin-top:4px">${article.country && article.country !== "한국" ? `<strong>${escapeHtml(article.country)}</strong> · ` : ""}${escapeHtml(article.publisher)} · ${escapeHtml(article.published_at)} · ${escapeHtml(article.matched)}${similar}${evidence}<button type="button" class="ghost summary-button">요약 보기</button></div><div class="article-summary" hidden></div></li>`;
+                const alts = (article.alternates || []).filter(alt => String(alt).startsWith("https://")).join(" ");
+                return `<li data-tone="${escapeHtml(article.tone)}" data-url="${safeUrl}" data-subject="${escapeHtml(article.matched || "")}" data-title="${escapeHtml(article.title)}" data-edition="${escapeHtml(article.edition || "")}" data-published="${escapeHtml(article.published_at || "")}" data-alts="${escapeHtml(alts)}"><div class="chip-row">${toneChip(article.tone, article.tone_strong)}<span class="chip">${escapeHtml(article.category)}</span><a href="${safeUrl}" target="_blank" rel="noopener noreferrer"${article.title_ko ? ` title="${escapeHtml(article.title)}"` : ""}>${escapeHtml(article.title_ko || article.title)}</a>${article.title_ko ? '<span class="chip">번역</span>' : ""}</div><div class="code" style="margin-top:4px">${article.country && article.country !== "한국" ? `<strong>${escapeHtml(article.country)}</strong> · ` : ""}${escapeHtml(article.publisher)} · ${escapeHtml(article.published_at)} · ${escapeHtml(article.matched)}${similar}${evidence}<button type="button" class="ghost summary-button">요약 보기</button></div><div class="article-summary" hidden></div></li>`;
             }).join("")}</ul>`;
         }
-        async function loadSummary(item, toggle) {
+        const hasExtension = () => Boolean(document.documentElement.dataset.tossExtension);
+        async function loadSummary(item, toggle, force) {
             const box = item.querySelector(".article-summary"), button = item.querySelector(".summary-button");
+            if (force) delete box.dataset.state;
             if (box.dataset.state) {
                 if (toggle && box.dataset.state !== "loading") { box.hidden = !box.hidden; button.textContent = box.hidden ? "요약 보기" : "요약 접기"; }
                 return;
             }
             box.dataset.state = "loading"; box.hidden = false; box.textContent = "기사 본문을 읽어 요약하는 중입니다."; button.textContent = "요약 접기";
             try {
-                const data = await fetchJson(`/api/v1/article-summary?url=${encodeURIComponent(item.dataset.url)}`);
+                const params = new URLSearchParams({ url: item.dataset.url, subject: item.dataset.subject || "", title: item.dataset.title || "", edition: item.dataset.edition || "", published: item.dataset.published || "" });
+                (item.dataset.alts || "").split(" ").filter(Boolean).forEach(alt => params.append("alt", alt));
+                const data = await fetchJson(`/api/v1/article-summary?${params}`);
+                item.dataset.summary = data.ok && !data.blocked ? "ok" : data.blocked ? "blocked" : "fail";
+                item.dataset.publisherUrl = data.publisher_url || "";
+                if (data.ok && AI_TONES[data.tone]) {
+                    // 본문을 읽은 AI 판정으로 제목 기준 판정을 바꿉니다.
+                    const [tone, strong] = AI_TONES[data.tone];
+                    item.dataset.tone = tone;
+                    item.querySelector(".body-tone")?.remove();
+                    item.querySelector(".tone-chip").outerHTML = toneChip(tone, strong) + '<span class="chip body-tone" title="기사 본문을 읽고 다시 판정했습니다">본문 기준</span>';
+                    const active = item.closest(".news-list")?.previousElementSibling?.querySelector(".news-filter.active");
+                    if (active?.dataset.tone) item.hidden = item.dataset.tone !== active.dataset.tone;
+                    refreshFilterCounts(item.closest(".news-list"));
+                }
                 if (data.ok) {
-                    const origin = data.source === "ai" ? "AI 요약" : data.source === "body" ? "본문 추출 요약" : "매체 제공 요약";
+                    const origin = data.source === "title" ? "제목 기반 설명 · 본문 미확인" : data.source === "sec" ? "SEC 공시 원문 AI 요약" : data.source === "sec_body" ? "SEC 공시 원문 추출 요약" : data.source === "ai" ? "AI 요약" : data.source === "body" ? "본문 추출 요약" : "매체 제공 요약";
                     const language = data.summary_ko || data.translated ? " · 번역" : data.lang === "en" ? " · 번역 실패, 원문 표시" : "";
-                    box.innerHTML = `${escapeHtml(data.summary_ko || data.summary)} <span class="code">(${origin}${language})</span>`;
+                    let altHost = "";
+                    try { altHost = data.alternate ? new URL(data.alternate.publisher_url).hostname.replace(/^www[.]/, "") : ""; } catch (error) { altHost = "다른 매체"; }
+                    const via = (data.via === "browser" ? " · 브라우저로 읽음" : "") + (data.alternate ? ` · 원문이 막혀 같은 내용의 ${altHost} 기사로 요약` : "");
+                    const filing = data.filing ? `<div style="font-weight:600;margin-bottom:4px">${escapeHtml(data.filing.description)} <a href="${String(data.filing.url).startsWith("https://www.sec.gov/") ? escapeHtml(data.filing.url) : "#"}" target="_blank" rel="noopener noreferrer" class="code">공시 원문</a></div>` : "";
+                    box.innerHTML = `${filing}${escapeHtml(data.summary_ko || data.summary)} <span class="code">(${origin}${language}${via})</span>`;
                     if (data.summary_ko) box.title = data.summary;
                 } else { box.innerHTML = `<span class="code">${escapeHtml(data.reason)}</span>`; }
+                item.dataset.fallback = data.ok && data.blocked ? "1" : "";
+                if (data.blocked) sendToExtension(item, box, data.ok);
             } catch (error) { box.innerHTML = `<span class="code">요약을 불러오지 못했습니다. (${escapeHtml(error.message)})</span>`; }
             box.dataset.state = "done";
         }
-        async function loadTopSummaries(root, limit = 8) {
-            // 위쪽 기사부터 두 건씩 자동으로 요약합니다. 나머지는 '요약 보기'를 누를 때 가져옵니다.
-            const queue = [...root.querySelectorAll(".news-list li[data-url]")].slice(0, limit);
-            const worker = async () => { while (queue.length) { const item = queue.shift(); if (item.isConnected) await loadSummary(item, false); } };
-            await Promise.all([worker(), worker()]);
+        const sentToExtension = new Set();
+        function sendToExtension(item, box, hasFallback) {
+            // 서버가 원문을 못 읽은 기사는 확장 프로그램이 있으면 자동으로 브라우저 탭에서 읽게 합니다. 한 기사는 한 번만 보냅니다.
+            if (!hasExtension() || sentToExtension.has(item.dataset.url)) return;
+            sentToExtension.add(item.dataset.url);
+            if (!hasFallback) box.innerHTML = '<span class="code">원문이 막혀 브라우저로 대신 읽을 차례를 기다리는 중입니다.</span>';
+            window.postMessage({ type: "toss-ext:summarize", jobs: [{ url: item.dataset.url, subject: item.dataset.subject || "", open_url: item.dataset.publisherUrl || "" }] }, location.origin);
+        }
+        window.addEventListener("message", event => {
+            // 확장 프로그램이 보내는 진행 상황: 기사 한 건을 열기 시작함(reading) / 끝남(done)
+            if (event.source !== window || event.origin !== location.origin || event.data?.type !== "toss-ext:progress") return;
+            const { url, state, ok, reason } = event.data;
+            document.querySelectorAll(".news-list li[data-url]").forEach(item => {
+                if (item.dataset.url !== url) return;
+                const box = item.querySelector(".article-summary");
+                box.hidden = false;
+                // 제목 기반 설명이 이미 떠 있으면 읽는 동안에도 그대로 두고, 원문 요약이 오면 바꿉니다.
+                const hasFallback = item.dataset.fallback === "1";
+                if (state === "reading") { if (!hasFallback) { box.dataset.state = "loading"; box.textContent = "원문이 막혀 브라우저 탭에서 대신 읽는 중입니다."; } return; }
+                if (ok) { loadSummary(item, false, true); }
+                else if (!hasFallback) { box.innerHTML = `<span class="code">원문을 열 수 없는 기사입니다. ${escapeHtml(reason || "")}</span>`; box.dataset.state = "done"; }
+            });
+        });
+        // 기사가 화면에 들어오면 자동으로 요약합니다. 동시에 세 건까지 요청하고, 지금 화면에 보이는 기사를 먼저 처리합니다.
+        const SUMMARY_CONCURRENCY = 3;
+        const summaryQueue = [], visibleItems = new Set();
+        let summaryWorkers = 0;
+        async function drainSummaries() {
+            if (summaryWorkers >= SUMMARY_CONCURRENCY) return;
+            summaryWorkers += 1;
+            try {
+                while (summaryQueue.length) {
+                    const index = Math.max(0, summaryQueue.findIndex(item => visibleItems.has(item)));
+                    const [item] = summaryQueue.splice(index, 1);
+                    summaryObserver.unobserve(item);
+                    visibleItems.delete(item);
+                    if (item.isConnected && !item.querySelector(".article-summary").dataset.state) await loadSummary(item, false);
+                }
+            } finally { summaryWorkers -= 1; }
+        }
+        const summaryObserver = new IntersectionObserver(entries => {
+            for (const entry of entries) {
+                if (!entry.isIntersecting) { visibleItems.delete(entry.target); continue; }
+                visibleItems.add(entry.target);
+                if (!summaryQueue.includes(entry.target)) summaryQueue.push(entry.target);
+            }
+            for (let worker = 0; worker < SUMMARY_CONCURRENCY; worker++) drainSummaries();
+        }, { rootMargin: "200px 0px" });
+        function loadTopSummaries(root) {
+            root.querySelectorAll(".news-list li[data-url]").forEach(item => summaryObserver.observe(item));
         }
         function digestMarkup(digest, signal) {
-            const counts = `<div class="chip-row" style="margin:8px 0"><span class="chip pos">호재 ${digest.positive}</span><span class="chip neg">악재 ${digest.negative}</span><span class="chip">중립 ${digest.neutral}</span><span class="chip">논조 ${escapeHtml(digest.tone)}</span><span class="chip">${digest.method === "ai" ? "AI 분류" : "규칙 기반 분류"}</span></div>`;
+            const counts = `<div class="chip-row" style="margin:8px 0"><span class="chip pos">호재 ${digest.positive}</span><span class="chip neg">악재 ${digest.negative}</span><span class="chip">중립 ${digest.neutral}</span>${digest.unrelated ? `<span class="chip" style="opacity:.6" title="주가와 관계없는 기사라 논조 계산에서 뺐습니다">무관 ${digest.unrelated}</span>` : ""}${digest.strong_positive || digest.strong_negative ? `<span class="chip">강한 호재 ${digest.strong_positive || 0} · 강한 악재 ${digest.strong_negative || 0}</span>` : ""}<span class="chip">논조 ${escapeHtml(digest.tone)}</span><span class="chip">${digest.method === "ai" ? "AI 분류" : digest.method === "ai_partial" ? `AI 분류 ${Math.round((digest.ai_coverage || 0) * 100)}% · 나머지 규칙` : "규칙 기반 분류"}</span></div>`;
             return `<p style="margin:0">${escapeHtml(digest.summary)}</p>${counts}${signal ? `<div class="signal">${escapeHtml(signal)}</div>` : ""}<p class="analysis-meta" style="text-align:left;margin:0 0 10px">${escapeHtml(digest.caveat)}</p>`;
         }
         function mountChart(container, candles, currency, markers = []) {
@@ -463,7 +542,7 @@ MARKET_TREND_PAGE = """<!doctype html>
             const segments = trend.segments.map(segment => `<span class="chip ${segment.direction === "상승" ? "pos" : segment.direction === "하락" ? "neg" : ""}" title="판정 기준 ±${segment.threshold}%">${escapeHtml(segment.start_date.slice(5))}~${escapeHtml(segment.end_date.slice(5))} ${escapeHtml(segment.direction)} ${signedRate(segment.change_rate)}</span>`).join("");
             return `<div class="stat-grid">
                 ${stat("기간 등락률", `<span class="${rateClassOf(trend.change_rate)}">${signedRate(trend.change_rate)}</span>`, `${priceLabel(trend.start_close, currency)} → ${priceLabel(trend.end_close, currency)}`)}
-                ${stat("흐름", escapeHtml(trend.flow), `${trend.trading_days}거래일 · 상승 ${trend.up_days}일 / 하락 ${trend.down_days}일`)}
+                ${stat("흐름", escapeHtml(trend.flow), `장이 열린 ${trend.trading_days}일 중 상승 ${trend.up_days}일 / 하락 ${trend.down_days}일`)}
                 ${stat("최대 낙폭", `<span class="negative">${signedRate(trend.max_drawdown.rate)}</span>`, `${escapeHtml(trend.max_drawdown.peak_date)} → ${escapeHtml(trend.max_drawdown.trough_date)}`)}
                 ${stat("고가 / 저가", `${priceLabel(trend.high.price, currency)} / ${priceLabel(trend.low.price, currency)}`, `${escapeHtml(trend.high.date)} / ${escapeHtml(trend.low.date)}`)}
                 ${stat("일간 변동성", `${trend.daily_volatility.toFixed(2)}%`, `최대 상승 ${signedRate(trend.best_day.change_rate)} (${escapeHtml(trend.best_day.date)}) · 최대 하락 ${signedRate(trend.worst_day.change_rate)} (${escapeHtml(trend.worst_day.date)})`)}
@@ -534,7 +613,7 @@ MARKET_TREND_PAGE = """<!doctype html>
             try {
                 const report = await fetchJson(`/api/v1/sectors/${encodeURIComponent(sectorId)}/report?market=${market}&days=${days}`);
                 if (request !== sectorRequest) return;
-                const durationLabels = { "1d": "1일", "1w": "1주", "1mo": "1개월", "3mo": "3개월", "6mo": "6개월", "1y": "1년" };
+                const durationLabels = { "1d": "1일", "1w": "1주", "1mo": "20일", "3mo": "60일", "6mo": "120일", "1y": "1년" };
                 const rates = Object.entries(report.rates).map(([duration, value]) => rateChip(durationLabels[duration] || duration, value)).join("");
                 const children = report.children.length
                     ? `<h3>세부 분야 (오늘 등락률 순)</h3><div class="chip-row">${report.children.map(child => `<button type="button" class="ghost sector-link" data-sector="${escapeHtml(child.sector_id)}">${escapeHtml(child.name)} <span class="${rateClassOf(child.rates["1d"])}">${signedRate(child.rates["1d"])}</span> · ${escapeHtml(child.flow)}</button>`).join("")}</div>`
@@ -563,7 +642,7 @@ MARKET_TREND_PAGE = """<!doctype html>
             } catch (error) { if (request === sectorRequest) root.innerHTML = `<p class="error" style="padding:10px 0">분야 흐름을 계산하지 못했습니다. (${escapeHtml(error.message)})</p>`; }
         }
         let briefingRequest = 0;
-        const PERIOD_LABELS = { "1d": "1일", "1w": "1주", "1mo": "1개월", "3mo": "3개월" };
+        const PERIOD_LABELS = { "1d": "1일", "1w": "1주", "1mo": "20일", "3mo": "60일" };
         function periodChips(rates, keys = ["1d", "1w", "1mo", "3mo"]) {
             return keys.map(key => rateChip(PERIOD_LABELS[key], rates?.[key])).join("");
         }
@@ -572,7 +651,7 @@ MARKET_TREND_PAGE = """<!doctype html>
         }
         function renderCombinedBriefing(data) {
             const narrative = data.narrative, cross = data.cross;
-            const gauges = data.gauges.map(gauge => `<div class="stat clickable" data-symbol="${escapeHtml(gauge.symbol)}" title="기간별 주가 흐름 보기"><small>${gauge.market === "KR" ? "국장" : "미장"} · ${escapeHtml(gauge.name)} · ${escapeHtml(gauge.date)}</small><strong>${priceLabel(gauge.close, gauge.currency)}</strong><div class="chip-row" style="margin:8px 0 6px">${periodChips(gauge.rates)}</div><div class="code">최근 3개월: ${escapeHtml(gauge.flow || "-")}</div></div>`).join("");
+            const gauges = data.gauges.map(gauge => `<div class="stat clickable" data-symbol="${escapeHtml(gauge.symbol)}" title="기간별 주가 흐름 보기"><small>${gauge.market === "KR" ? "국장" : "미장"} · ${escapeHtml(gauge.name)} · ${escapeHtml(gauge.date)}</small><strong>${priceLabel(gauge.close, gauge.currency)}</strong><div class="chip-row" style="margin:8px 0 6px">${periodChips(gauge.rates)}</div><div class="code">최근 60일: ${escapeHtml(gauge.flow || "-")}</div></div>`).join("");
             const marketCard = (key, label) => {
                 const market = data.markets[key];
                 const brief = items => items.map(item => `${escapeHtml(item.name)} <span class="${rateClassOf(item.rates["1d"])}">${signedRate(item.rates["1d"])}</span>`).join(" · ");
@@ -597,17 +676,17 @@ MARKET_TREND_PAGE = """<!doctype html>
         function renderBriefing(data) {
             if (data.market === "ALL") { renderCombinedBriefing(data); return; }
             const narrative = data.narrative, overview = data.sector_overview;
-            const gauges = data.gauges.map(gauge => `<div class="stat clickable" data-symbol="${escapeHtml(gauge.symbol)}" title="기간별 주가 흐름 보기"><small>${escapeHtml(gauge.name)} · ${escapeHtml(gauge.date)}</small><strong>${priceLabel(gauge.close, gauge.currency)}</strong><div class="chip-row" style="margin:8px 0 6px">${periodChips(gauge.rates)}</div><div class="code">최근 3개월: ${escapeHtml(gauge.flow || "-")}${gauge.max_drawdown ? ` · 최대 낙폭 ${signedRate(gauge.max_drawdown)}` : ""}</div></div>`).join("");
+            const gauges = data.gauges.map(gauge => `<div class="stat clickable" data-symbol="${escapeHtml(gauge.symbol)}" title="기간별 주가 흐름 보기"><small>${escapeHtml(gauge.name)} · ${escapeHtml(gauge.date)}</small><strong>${priceLabel(gauge.close, gauge.currency)}</strong><div class="chip-row" style="margin:8px 0 6px">${periodChips(gauge.rates)}</div><div class="code">최근 60일: ${escapeHtml(gauge.flow || "-")}${gauge.max_drawdown ? ` · 최대 낙폭 ${signedRate(gauge.max_drawdown)}` : ""}</div></div>`).join("");
             const sectorRow = item => `<div class="briefing-row clickable" data-sector="${escapeHtml(item.sector_id)}" title="분야 기사와 구성 종목 보기"><strong>${escapeHtml(item.name)}</strong><span class="chip-row">${periodChips(item.rates, ["1d", "1w", "1mo"])}${flowChip(item.flow)}</span></div>`;
             const turning = (label, items) => items.length ? `<div class="chip-row" style="margin-top:8px"><span class="code">${label}</span>${items.map(item => `<button type="button" class="ghost" data-sector="${escapeHtml(item.sector_id)}">${escapeHtml(item.name)} <span class="${rateClassOf(item.rates["1d"])}">${signedRate(item.rates["1d"])}</span></button>`).join("")}</div>` : "";
             const flowCounts = Object.entries(overview.flow_counts).sort((left, right) => right[1] - left[1]).map(([flow, count]) => `<span class="chip">${escapeHtml(flow)} ${count}</span>`).join("");
             const focus = data.focus_sectors.map(sector => {
                 const articles = sector.articles.map(article => {
                     const url = String(article.url || "");
-                    return `<li>${toneChip(article.tone)} <a href="${url.startsWith("https://") ? escapeHtml(url) : "#"}" target="_blank" rel="noopener noreferrer"${article.title_ko ? ` title="${escapeHtml(article.title)}"` : ""}>${escapeHtml(article.title_ko || article.title)}</a>${article.title_ko ? ' <span class="chip">번역</span>' : ""} <span class="code">${article.country && article.country !== "한국" ? `${escapeHtml(article.country)} · ` : ""}${escapeHtml(article.publisher)}</span></li>`;
+                    return `<li>${toneChip(article.tone, article.tone_strong)} <a href="${url.startsWith("https://") ? escapeHtml(url) : "#"}" target="_blank" rel="noopener noreferrer"${article.title_ko ? ` title="${escapeHtml(article.title)}"` : ""}>${escapeHtml(article.title_ko || article.title)}</a>${article.title_ko ? ' <span class="chip">번역</span>' : ""} <span class="code">${article.country && article.country !== "한국" ? `${escapeHtml(article.country)} · ` : ""}${escapeHtml(article.publisher)}</span></li>`;
                 }).join("");
                 const counts = sector.article_count
-                    ? `<span class="chip pos">호재 ${sector.positive}</span><span class="chip neg">악재 ${sector.negative}</span><span class="chip">중립 ${sector.neutral}</span><span class="chip">논조 ${escapeHtml(sector.tone)}</span>`
+                    ? `<span class="chip pos">호재 ${sector.positive}</span><span class="chip neg">악재 ${sector.negative}</span><span class="chip">중립 ${sector.neutral}</span>${sector.unrelated ? `<span class="chip" style="opacity:.6">무관 ${sector.unrelated}</span>` : ""}<span class="chip">논조 ${escapeHtml(sector.tone)}</span>`
                     : '<span class="chip">기사 없음</span>';
                 return `<div class="briefing-card"><h4 class="clickable" data-sector="${escapeHtml(sector.sector_id)}">${escapeHtml(sector.name)} ${flowChip(sector.flow)} <span class="${rateClassOf(sector.rates["1d"])}">${signedRate(sector.rates["1d"])}</span></h4><div class="chip-row">${counts}</div>${sector.signal ? `<div class="signal">${escapeHtml(sector.signal)}</div>` : ""}${articles ? `<ul class="news-list" style="margin-top:10px">${articles}</ul>` : ""}<div class="code" style="margin-top:8px">검색 기준: ${escapeHtml(sector.news_basis.join(", "))}</div></div>`;
             }).join("");
@@ -626,7 +705,7 @@ MARKET_TREND_PAGE = """<!doctype html>
                 <div class="chip-row" style="margin-bottom:10px">${flowCounts}</div>
                 <div class="briefing-grid"><div class="briefing-card"><h4 class="positive">강한 분야</h4>${overview.strongest.map(sectorRow).join("")}</div><div class="briefing-card"><h4 class="negative">약한 분야</h4>${overview.weakest.map(sectorRow).join("")}</div></div>
                 ${turning("반등 시도", overview.turning_up)}${turning("상승 뒤 약세", overview.turning_down)}
-                <h3>주목 분야의 기사 논조 <span class="code">최근 ${data.news_days}일 · 제목 기준 규칙 분류</span></h3><div class="briefing-grid">${focus}</div>
+                <h3>주목 분야의 기사 논조 <span class="code">최근 ${data.news_days}일 · ${data.focus_sectors.some(sector => sector.classification && sector.classification !== "rule") ? "제목 기준 AI 분류(실패 시 규칙)" : "제목 기준 규칙 분류"}</span></h3><div class="briefing-grid">${focus}</div>
                 ${sampleMarkup}
                 <p class="analysis-meta" style="text-align:left;margin-top:14px">${escapeHtml(data.caveat)}</p>`;
         }

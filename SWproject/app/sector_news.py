@@ -10,11 +10,18 @@ import httpx
 GOOGLE_NEWS_RSS = "https://news.google.com/rss/search"
 KST = timezone(timedelta(hours=9))
 SIMILAR_TITLE_THRESHOLD = 0.4
+MAX_ALTERNATES = 3
 
 
 def _bigrams(title: str) -> set[str]:
     text = re.sub(r"\W+", "", title)
     return {text[index:index + 2] for index in range(len(text) - 1)}
+
+
+def title_similarity(left: str, right: str) -> float:
+    left_grams, right_grams = _bigrams(left), _bigrams(right)
+    union = left_grams | right_grams
+    return len(left_grams & right_grams) / len(union) if union else 0.0
 
 
 def merge_similar(articles: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -26,9 +33,18 @@ def merge_similar(articles: list[dict[str, Any]]) -> list[dict[str, Any]]:
             union = grams | kept_grams
             if union and len(grams & kept_grams) / len(union) >= SIMILAR_TITLE_THRESHOLD:
                 kept_article["similar_count"] += 1 + article.get("similar_count", 0)
+                # 대표 기사를 열 수 없을 때 대신 요약할 수 있도록 다른 매체 기사 주소를 몇 개 남깁니다.
+                alternates = [article["url"], *article.get("alternates", [])]
+                kept_article["alternates"] = [
+                    url for url in dict.fromkeys(kept_article["alternates"] + alternates) if url != kept_article["url"]
+                ][:MAX_ALTERNATES]
                 break
         else:
-            kept.append((grams, {**article, "similar_count": article.get("similar_count", 0)}))
+            kept.append((grams, {
+                **article,
+                "similar_count": article.get("similar_count", 0),
+                "alternates": list(article.get("alternates", []))[:MAX_ALTERNATES],
+            }))
     return [article for _, article in kept]
 
 
@@ -191,6 +207,7 @@ async def collect_news(
                     "matched_kind": target.get("kind", "sector"),
                     "lang": edition["lang"],
                     "country": edition["country"],
+                    "edition": target.get("edition", "kr"),
                 }
                 for article in merge_similar(relevant)[:per_target]
             ]

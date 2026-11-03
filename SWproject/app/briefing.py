@@ -8,7 +8,7 @@ from .ai_client import ai_enabled, chat_completion
 from .analytics import analyze_rankings, build_detailed_insights
 from .history import fetch_daily_candles, summarize_trend
 from .market_insights import interpret_market
-from .news_classifier import NEGATIVE, POSITIVE, build_digest, classify_articles, tone_price_signal
+from .news_classifier import NEGATIVE, POSITIVE, classify_and_digest, tone_price_signal
 from .redis_client import load_rankings
 from .sector_news import KST, collect_news, sector_targets
 from .sectors import get_sector_flow, with_english_names
@@ -23,7 +23,9 @@ MARKET_GAUGES = {
     "US": [("SPY", "S&P 500 (SPY ETF)"), ("QQQ", "나스닥100 (QQQ ETF)")],
 }
 MARKET_LABELS = {"KR": "국장", "US": "미장"}
-PERIODS = (("1d", 1), ("1w", 5), ("1mo", 21), ("3mo", 63))  # 거래일 수
+# 거래일 수. 토스 랭킹·분야 등락률과 같은 길이입니다(1w=5, 1mo=20, 3mo=60거래일).
+PERIODS = (("1d", 1), ("1w", 5), ("1mo", 20), ("3mo", 60))
+FLOW_TRADING_DAYS = 60
 NEWS_DAYS = 7
 FOCUS_PER_SIDE = 2
 NEWS_STOCKS = 3
@@ -31,7 +33,7 @@ AI_TIMEOUT_SECONDS = 40.0
 
 
 async def gauge_snapshot(api: TossApiClient, symbol: str, label: str) -> dict[str, Any] | None:
-    """지수(또는 대표 ETF)의 현재 수준, 기간별 등락률, 최근 3개월 흐름."""
+    """지수(또는 대표 ETF)의 현재 수준, 기간별 등락률, 최근 60거래일 흐름(화면에는 60일로 표시)."""
     today = date.today()
     candles = await fetch_daily_candles(api, symbol, today - timedelta(days=140), today)
     if len(candles) < 2:
@@ -41,7 +43,7 @@ async def gauge_snapshot(api: TossApiClient, symbol: str, label: str) -> dict[st
         key: round((closes[-1] / closes[-1 - days] - 1) * 100, 2) if len(closes) > days and closes[-1 - days] else None
         for key, days in PERIODS
     }
-    trend = summarize_trend(candles[-64:])
+    trend = summarize_trend(candles[-(FLOW_TRADING_DAYS + 1):])
     return {
         "symbol": symbol,
         "name": label,
@@ -55,7 +57,7 @@ async def gauge_snapshot(api: TossApiClient, symbol: str, label: str) -> dict[st
 
 
 async def sector_news_tone(api: TossApiClient, sector: dict[str, Any], market_country: str) -> dict[str, Any]:
-    """분야 하나의 최근 기사 논조. 여러 분야를 한꺼번에 보므로 규칙 기반으로만 분류합니다."""
+    """분야 하나의 최근 기사 논조. AI가 있으면 AI로 분류하고(요약문은 만들지 않음), 없으면 규칙 기반입니다."""
     overseas = market_country == "US"
     try:
         stocks = (await api.fetch_sector_stocks(sector["sector_id"], market_country))[:NEWS_STOCKS]
@@ -69,8 +71,7 @@ async def sector_news_tone(api: TossApiClient, sector: dict[str, Any], market_co
         sector["name"], stocks, us_listed=overseas, world_stocks=1, include_sector=not (overseas and stocks)
     )
     articles = await attach_korean_titles(await collect_news(targets, days=NEWS_DAYS, per_target=10, max_articles=30))
-    classified = classify_articles(articles)
-    digest = build_digest(classified, sector["name"], NEWS_DAYS)
+    classified, digest = await classify_and_digest(articles, sector["name"], NEWS_DAYS, with_summary=False)
 
     def pick(tone: str, reverse: bool) -> list[dict[str, Any]]:
         chosen = sorted(
@@ -81,7 +82,7 @@ async def sector_news_tone(api: TossApiClient, sector: dict[str, Any], market_co
         return [
             {
                 key: article[key]
-                for key in ("title", "title_ko", "url", "publisher", "published_at", "tone", "category", "lang", "country")
+                for key in ("title", "title_ko", "url", "publisher", "published_at", "tone", "tone_strong", "category", "lang", "country")
                 if key in article
             }
             for article in chosen
@@ -98,7 +99,11 @@ async def sector_news_tone(api: TossApiClient, sector: dict[str, Any], market_co
         "positive": digest["positive"],
         "negative": digest["negative"],
         "neutral": digest["neutral"],
+        "unrelated": digest["unrelated"],
+        "strong_positive": digest["strong_positive"],
+        "strong_negative": digest["strong_negative"],
         "article_count": digest["article_count"],
+        "classification": digest["method"],
         "news_basis": list(dict.fromkeys(target["label"] for target in targets))[:4],
         "signal": tone_price_signal(digest, sector["rates"].get("1w"), "분야 1주"),
         "articles": shown,
@@ -129,7 +134,7 @@ def rule_narrative(briefing: dict[str, Any]) -> dict[str, Any]:
     for gauge in gauges:
         points.append(
             f"{gauge['name']}: 1일 {_rate_text(gauge['rates']['1d'])}, 1주 {_rate_text(gauge['rates']['1w'])}, "
-            f"1개월 {_rate_text(gauge['rates']['1mo'])}. 최근 3개월 흐름은 {gauge['flow'] or '자료 없음'}입니다."
+            f"20일 {_rate_text(gauge['rates']['1mo'])}. 최근 60일 흐름은 {gauge['flow'] or '자료 없음'}입니다."
         )
     if overview["turning_up"] or overview["turning_down"]:
         up = ", ".join(item["name"] for item in overview["turning_up"][:3]) or "없음"
@@ -138,7 +143,8 @@ def rule_narrative(briefing: dict[str, Any]) -> dict[str, Any]:
     for sector in briefing["focus_sectors"]:
         if sector["article_count"]:
             points.append(
-                f"{sector['name']}({sector['flow']}, 1일 {_rate_text(sector['rates'].get('1d'))}): 기사 {sector['article_count']}건 중 "
+                f"{sector['name']}({sector['flow']}, 1일 {_rate_text(sector['rates'].get('1d'))}): "
+                f"관련 기사 {sector['article_count'] - sector.get('unrelated', 0)}건 중 "
                 f"호재 {sector['positive']}·악재 {sector['negative']}건으로 논조는 '{sector['tone']}'."
                 + (f" {sector['signal']}" if sector["signal"] else "")
             )
@@ -163,7 +169,7 @@ async def ai_narrative(briefing: dict[str, Any]) -> dict[str, Any]:
     }
     system = (
         "너는 증권 시황 분석가다. 사용자가 주는 JSON 자료만 근거로 한국어 시황 브리핑을 쓴다. "
-        "등락률(rates)은 % 단위다. 자료에 없는 사실·수치·전망은 쓰지 않는다. 기사 제목은 참고 맥락으로만 "
+        "등락률(rates)은 % 단위이고, 기간 키는 장이 열린 날 기준으로 1d=1일, 1w=5일(1주), 1mo=20일, 3mo=60일이다. 기간은 '개월'이나 '거래일' 대신 '20일'처럼 일수로 쓴다. 자료에 없는 사실·수치·전망은 쓰지 않는다. 기사 제목은 참고 맥락으로만 "
         "언급하고 주가 변동의 원인이라고 단정하지 않는다. 매수·매도 권유를 하지 않는다. "
         "'랭킹표본'은 상승·하락·거래대금 상위 종목만 모은 표본이라 시장 전체를 대표하지 않으니 그렇게 구분해서 쓴다. "
         "단순 나열 대신 지수 흐름, 분야 간 차별화, 기사 논조와 가격의 일치·괴리를 서로 연결해 해석한다. "
@@ -346,7 +352,7 @@ async def combined_ai_narrative(kr: dict[str, Any], us: dict[str, Any], cross: d
     system = (
         "너는 증권 시황 분석가다. 사용자가 주는 JSON 자료만 근거로 국장과 미장을 비교하는 한국어 브리핑을 쓴다. "
         "두 시장을 따로 나열하지 말고, 같이 움직인 분야와 엇갈린 분야, 지수 흐름의 차이를 연결해 해석한다. "
-        "등락률(rates)은 % 단위다. 미장 수치는 한국 시간으로 직전 밤 거래분이라 국장과 시차가 있음을 감안한다. "
+        "등락률(rates)은 % 단위이고, 기간 키는 장이 열린 날 기준으로 1d=1일, 1w=5일(1주), 1mo=20일, 3mo=60일이다. 기간은 '개월'이나 '거래일' 대신 '20일'처럼 일수로 쓴다. 미장 수치는 한국 시간으로 직전 밤 거래분이라 국장과 시차가 있음을 감안한다. "
         "자료에 없는 사실·수치·전망은 쓰지 않고, 한 시장이 다른 시장의 원인이라고 단정하지 않는다. "
         "매수·매도 권유를 하지 않는다. "
         'JSON으로만 답한다: {"headline": "한 줄 제목(45자 이내)", "summary": "4~5문장 비교 해석", '

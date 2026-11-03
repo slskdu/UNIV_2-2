@@ -15,7 +15,8 @@ from .translator import attach_korean_titles
 logger = logging.getLogger(__name__)
 
 FLOW_DURATIONS = ("1d", "1w", "1mo", "3mo")
-DURATION_LABELS = {"1d": "1일", "1w": "1주", "1mo": "1개월", "3mo": "3개월", "6mo": "6개월", "1y": "1년"}
+# 토스 등락률 기간은 달력이 아니라 거래일 기준입니다(미장 실측: 1w=5, 1mo=20, 3mo=60, 6mo=120거래일).
+DURATION_LABELS = {"1d": "1일", "1w": "1주", "1mo": "20일", "3mo": "60일", "6mo": "120일", "1y": "1년"}
 SECTOR_SPACING_SECONDS = 0.22  # SECTOR 그룹 한도(초당 5회) 안쪽으로 호출
 SECTOR_LIST_TTL_SECONDS = 24 * 60 * 60  # 공식 문서 권장: 섹터 목록은 하루 한 번 조회
 SECTOR_FLOW_REFRESH_SECONDS = 600
@@ -53,7 +54,7 @@ async def get_sector_list(api: TossApiClient) -> list[dict[str, Any]]:
 
 
 def flow_label(rates: dict[str, float | None]) -> str:
-    """1일·1주·1개월 등락률의 조합으로 분야의 현재 흐름 단계를 이름 붙입니다."""
+    """1일·1주·20일(거래일) 등락률의 조합으로 분야의 현재 흐름 단계를 이름 붙입니다."""
     day, week, month = rates.get("1d"), rates.get("1w"), rates.get("1mo")
     if day is None or week is None or month is None:
         return "자료 부족"
@@ -190,7 +191,7 @@ def _flow_overview(sectors: list[dict[str, Any]]) -> dict[str, Any]:
         summary = (
             f"대분류 {len(major)}개 중 {advancing}개가 오늘 상승해 {mood}입니다. "
             f"강한 분야는 {strong_text}, 약한 분야는 {weak_text}입니다. "
-            f"1주·1개월 모두 오른 '상승 지속' 분야는 {counts['상승 지속']}개, "
+            f"1주·20일 모두 오른 '상승 지속' 분야는 {counts['상승 지속']}개, "
             f"모두 내린 '하락 지속' 분야는 {counts['하락 지속']}개입니다."
         )
 

@@ -13,7 +13,7 @@ from app.history import (  # noqa: E402
     detect_price_adjustments,
     summarize_trend,
 )
-from app.news_classifier import build_digest, classify_articles, classify_title, tone_price_signal  # noqa: E402
+from app.news_classifier import build_digest, classify_articles, classify_title, merge_ai_labels, tone_price_signal  # noqa: E402
 from app.sector_news import clean_company_name, foreign_targets, is_relevant, merge_similar, parse_rss  # noqa: E402
 from app.sectors import flow_label  # noqa: E402
 from app.translator import parse_translation  # noqa: E402
@@ -47,6 +47,12 @@ class ClassifyTitleTest(unittest.TestCase):
         self.assertEqual(classify_title("D사 3분기 영업이익 증가")["category"], "실적")
         self.assertEqual(classify_title("E사 창립 기념 행사")["category"], "기타")
 
+    def test_expanded_keywords(self):
+        self.assertEqual(classify_title("F사 신제품 사전 예약 완판")["tone"], "호재")
+        self.assertEqual(classify_title("G사 공장 가동 지연")["tone"], "악재")
+        self.assertTrue(classify_title("H사, 美 수출 통제 대상 포함")["tone_strong"])
+        self.assertEqual(classify_title("Chipmaker raises guidance")["tone_score"], 2)
+
 
 class DigestTest(unittest.TestCase):
     def test_tone_and_signal(self):
@@ -65,6 +71,34 @@ class DigestTest(unittest.TestCase):
         self.assertEqual(digest["tone"], "판단 보류")
         self.assertIsNone(tone_price_signal(digest, -3.0, "분야 1주"))
         self.assertEqual(build_digest([], "조선", 7)["article_count"], 0)
+
+
+class AiLabelMergeTest(unittest.TestCase):
+    def test_failed_batch_keeps_rule_labels(self):
+        rule = classify_articles([{"title": "A사 급등"}, {"title": "B사 행사"}, {"title": "C사 급락"}, {"title": "D사 소식"}])
+        merged, covered = merge_ai_labels(rule, [["악재", "호재"], None], batch_size=2)
+        self.assertEqual(covered, 2)
+        self.assertEqual([a["tone"] for a in merged], ["악재", "호재", "악재", "중립"])
+        self.assertEqual([a["tone_source"] for a in merged], ["ai", "ai", "rule", "rule"])
+        self.assertEqual(merged[0]["tone_keywords"], [])
+        self.assertEqual(merged[2]["tone_keywords"], ["급락"])
+
+    def test_strong_and_unrelated_labels(self):
+        rule = classify_articles([{"title": f"기사 {i}"} for i in range(5)])
+        merged, covered = merge_ai_labels(rule, [["강한 호재", "호재", "무관", "무관", "강한 악재"]], batch_size=20)
+        self.assertEqual(covered, 5)
+        self.assertEqual([(a["tone"], a["tone_score"], a["tone_strong"]) for a in merged][:3],
+                         [("호재", 2, True), ("호재", 1, False), ("무관", 0, False)])
+        digest = build_digest(merged, "A사", 7)
+        self.assertEqual((digest["unrelated"], digest["relevant_count"]), (2, 3))
+        self.assertEqual((digest["strong_positive"], digest["strong_negative"]), (1, 1))
+        # 무관 기사는 비율 계산에서 빠집니다: (2 - 1) / 3
+        self.assertAlmostEqual(digest["balance"], 0.333, places=3)
+        self.assertIn("무관한 2건 제외", digest["summary"])
+
+    def test_unknown_label_falls_back(self):
+        merged, covered = merge_ai_labels(classify_articles([{"title": "A사 급등"}]), [["모름"]], batch_size=20)
+        self.assertEqual((covered, merged[0]["tone"], merged[0]["tone_source"]), (0, "호재", "rule"))
 
 
 class NewsParsingTest(unittest.TestCase):
@@ -90,6 +124,9 @@ class NewsParsingTest(unittest.TestCase):
         ])
         self.assertEqual([article["url"] for article in merged], ["https://e/1", "https://e/3"])
         self.assertEqual(merged[0]["similar_count"], 1)
+        # 대표 기사를 열 수 없을 때 대신 요약할 다른 매체 기사 주소
+        self.assertEqual(merged[0]["alternates"], ["https://e/2"])
+        self.assertEqual(merged[1]["alternates"], [])
 
 
 class RelevanceTest(unittest.TestCase):
@@ -273,6 +310,76 @@ class FlowLabelTest(unittest.TestCase):
         self.assertEqual(flow_label({"1d": 1, "1w": -2, "1mo": 3}), "상승 후 꺾임")
         self.assertEqual(flow_label({"1d": 1, "1w": None, "1mo": 3}), "자료 부족")
 
+
+
+class BrowserSummaryEndpointTest(unittest.TestCase):
+    def setUp(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        from app.api.insight_routes import router
+
+        app = FastAPI()
+        app.include_router(router)
+        self.client = TestClient(app)
+        self.body = {"url": "https://news.google.com/rss/articles/CBMiAbCdEfGhIjKl", "page_url": "https://example.com/a", "html": "<p>x</p>"}
+
+    def test_requires_extension_header(self):
+        self.assertEqual(self.client.post("/api/v1/article-summary/from-browser", json=self.body).status_code, 403)
+
+    def test_rejects_urls_outside_article_list(self):
+        response = self.client.post(
+            "/api/v1/article-summary/from-browser",
+            json={**self.body, "url": "https://evil.example.com/a"},
+            headers={"X-Toss-Extension": "1"},
+        )
+        self.assertEqual(response.status_code, 422)
+
+
+class SameStoryTest(unittest.TestCase):
+    def test_covers_story_by_title_keywords(self):
+        from app.article_summary import covers_story
+
+        title = "Mercer International plans Chapter 11 filing to cut $1.1B debt"
+        same = "Mercer International reached a deal with bondholders and will file a prepackaged Chapter 11 plan to cut debt."
+        other = "CIBC lowered its rating on Mercer International, citing weaker pulp prices."
+        self.assertTrue(covers_story(title, same))
+        self.assertFalse(covers_story(title, other))
+        self.assertFalse(covers_story("Mercer stock", same))  # 핵심 단어가 너무 적으면 판단하지 않음
+
+
+class SecFilingTest(unittest.TestCase):
+    def test_parse_filing_titles(self):
+        from app.sec_filings import parse_filing_title
+
+        self.assertEqual(parse_filing_title("Form 8K MERCER INTERNATIONAL INC. For: 3 November"), ("8-K", "MERCER INTERNATIONAL INC"))
+        self.assertEqual(parse_filing_title("Form 10Q Apple Inc For: 27 June"), ("10-Q", "Apple Inc"))
+        self.assertEqual(parse_filing_title("Form SC 13G Nvidia Corp"), ("SC 13G", "Nvidia Corp"))
+        self.assertIsNone(parse_filing_title("Nvidia shares rise after earnings"))
+
+    def test_company_names_match_sec_titles(self):
+        from app.sec_filings import normalize_company
+
+        self.assertEqual(normalize_company("RISING DRAGON ACQUISITION CORP"), normalize_company("Rising Dragon Acquisition Corp."))
+        self.assertEqual(normalize_company("MERCER INTERNATIONAL INC"), "MERCER INTERNATIONAL")
+
+    def test_pick_nearest_filing_and_describe(self):
+        from datetime import date
+
+        from app.sec_filings import describe_filing, filing_tone, pick_filing
+
+        recent = {
+            "form": ["8-K", "10-Q", "8-K"],
+            "filingDate": ["2026-11-03", "2026-11-01", "2026-10-29"],
+            "accessionNumber": ["a", "b", "c"],
+            "primaryDocument": ["a.htm", "b.htm", "c.htm"],
+            "items": ["1.02,7.01,9.01", "", "1.01,2.03,9.01"],
+        }
+        filing = pick_filing(recent, "8-K", date(2026, 11, 3))
+        self.assertEqual(filing["accession"], "a")
+        self.assertEqual(describe_filing(filing), "SEC 8-K 수시 공시(2026-11-03): 중요 계약 해지 · 투자자 대상 자료 공개(공정공시)")
+        self.assertEqual(filing_tone(filing), "악재")
+        self.assertIsNone(pick_filing(recent, "8-K", date(2026, 9, 1)))
 
 if __name__ == "__main__":
     unittest.main()

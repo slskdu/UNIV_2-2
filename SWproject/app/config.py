@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     ai_base_url: str = "https://api.openai.com/v1"
     # AI_MODEL이 과부하·한도 초과일 때 차례로 시도할 예비 모델(쉼표 구분).
     ai_fallback_models: str = ""
+    # SEC EDGAR는 요청에 서비스 이름과 연락처를 담은 User-Agent를 요구합니다.
+    sec_user_agent: str = "SWproject market-analysis (student project)"
 
     # 공식 Ranking API의 query parameter 이름입니다.
     ranking_type_param: str = "type"

@@ -2,9 +2,10 @@ import hashlib
 from datetime import date, timedelta
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Path, Query, Request
+from fastapi import APIRouter, Header, HTTPException, Path, Query, Request
+from pydantic import BaseModel, Field
 
-from ..article_summary import ai_enabled, google_article_id, summarize_google_article
+from ..article_summary import MAX_HTML_BYTES, ai_enabled, google_article_id, summarize_page, summarize_with_fallbacks
 from ..briefing import build_combined_briefing, build_market_briefing
 from ..history import (
     INDICATOR_NAMES,
@@ -33,6 +34,7 @@ ARTICLE_SUMMARY_TTL = 7 * 24 * 60 * 60
 BRIEFING_TTL = 300
 BRIEFING_RETRY_TTL = 90
 ARTICLE_SUMMARY_FAILURE_TTL = 600
+TITLE_EXPLANATION_TTL = 24 * 60 * 60
 
 
 def _api(request: Request) -> TossApiClient:
@@ -75,7 +77,7 @@ async def sector_report(
     """분야 상세: 기간별 등락률, 구성 종목, 호재/악재로 분류된 기사와 논조 요약."""
     try:
         return await cached_json(
-            f"insight:sector-report:v6:{market}:{sector_id}:{days}",
+            f"insight:sector-report:v9:{market}:{sector_id}:{days}",
             SECTOR_REPORT_TTL,
             lambda: build_sector_report(_api(request), sector_id, market.upper(), days),
         )
@@ -200,7 +202,7 @@ async def stock_news(
         }
 
     try:
-        result = await cached_json(f"insight:stock-news:v6:{symbol}:{days}", NEWS_TTL, load)
+        result = await cached_json(f"insight:stock-news:v9:{symbol}:{days}", NEWS_TTL, load)
     except TossApiError as error:
         raise _toss_error(error) from error
     if not result.get("found"):
@@ -209,7 +211,14 @@ async def stock_news(
 
 
 @router.get("/article-summary")
-async def article_summary(url: str = Query(max_length=2200)):
+async def article_summary(
+    url: str = Query(max_length=2200),
+    subject: str = Query("", max_length=80),
+    title: str = Query("", max_length=400),
+    edition: str = Query("", max_length=4),
+    alt: list[str] = Query([], max_length=3),
+    published: str = Query("", max_length=20),
+):
     """기사 한 건의 본문을 읽어 요약합니다. 영문 기사는 요약문의 한국어 번역을 함께 줍니다.
 
     서버가 임의 주소를 대신 조회하지 않도록 기사 목록에 실린 Google 뉴스 링크만 받습니다.
@@ -217,21 +226,70 @@ async def article_summary(url: str = Query(max_length=2200)):
     article_id = google_article_id(url)
     if not article_id:
         raise HTTPException(status_code=422, detail="기사 목록에 있는 기사 주소만 요약할 수 있습니다.")
-    # AI 키를 넣거나 빼면 이전 방식으로 만든 요약이 남지 않도록 방식별로 따로 캐시합니다.
-    mode = "ai" if ai_enabled() else "rule"
-    key = f"insight:article-summary:v2:{mode}:{hashlib.sha1(article_id.encode()).hexdigest()}"
+    key = _summary_key(article_id, subject)
     cached = await get_json(key)
     if cached is not None:
         return cached
-    result = await summarize_google_article(url)
+    alternates = [item for item in alt if len(item) <= 2200 and google_article_id(item)]
+    return await _store_summary(
+        key,
+        await summarize_with_fallbacks(url, subject.strip(), title.strip(), edition, alternates, _parse_day(published)),
+    )
+
+
+def _parse_day(text: str) -> date | None:
+    try:
+        return date.fromisoformat(text[:10])
+    except ValueError:
+        return None
+
+
+def _summary_key(article_id: str, subject: str) -> str:
+    # AI 키를 넣거나 빼면 이전 방식으로 만든 요약이 남지 않도록 방식별로 따로 캐시합니다.
+    mode = "ai" if ai_enabled() else "rule"
+    # subject(종목·분야)마다 본문 기준 논조가 달라질 수 있어 함께 키에 넣습니다.
+    return f"insight:article-summary:v7:{mode}:{hashlib.sha1(f'{article_id}|{subject.strip()}'.encode()).hexdigest()}"
+
+
+async def _store_summary(key: str, result: dict) -> dict:
     # 차단·일시 오류, 그리고 AI가 실패해 규칙 기반으로 대신한 요약은 잠시 뒤 다시 시도할 수 있게 짧게만 기억합니다.
-    settled = result["ok"] and (mode == "rule" or result.get("source") == "ai")
-    await set_json(key, result, ARTICLE_SUMMARY_TTL if settled else ARTICLE_SUMMARY_FAILURE_TTL)
+    settled = result["ok"] and (not ai_enabled() or result.get("source") == "ai")
+    # 제목 기반 설명은 확장 프로그램으로 원문을 읽으면 바뀔 수 있어 하루만 기억합니다.
+    ttl = TITLE_EXPLANATION_TTL if result.get("source") == "title" else ARTICLE_SUMMARY_TTL if settled else ARTICLE_SUMMARY_FAILURE_TTL
+    await set_json(key, result, ttl)
     return result
 
 
+class BrowserPage(BaseModel):
+    url: str = Field(max_length=2200)  # 기사 목록의 Google 뉴스 링크(캐시 키)
+    subject: str = Field("", max_length=80)
+    page_url: str = Field(max_length=2200)  # 브라우저가 실제로 연 언론사 주소
+    html: str = Field(max_length=MAX_HTML_BYTES)
+
+
+@router.post("/article-summary/from-browser")
+async def article_summary_from_browser(page: BrowserPage, x_toss_extension: str = Header("")):
+    """확장 프로그램이 사용자 브라우저에서 연 기사 페이지를 받아 요약합니다.
+
+    서버가 자동으로 받지 못한(차단·유료·스크립트 렌더링) 기사를 위한 경로입니다. 결과는 GET /article-summary와
+    같은 캐시 키에 저장되므로, 화면은 평소처럼 요약을 다시 불러오면 됩니다.
+    X-Toss-Extension 헤더를 요구해 다른 웹사이트가 이 주소로 요청을 보내지 못하게 합니다(헤더가 있으면 브라우저가
+    사전 확인 요청을 보내고, CORS 설정이 POST를 허용하지 않아 막힙니다).
+    """
+    if x_toss_extension != "1":
+        raise HTTPException(status_code=403, detail="확장 프로그램 요청만 받습니다.")
+    article_id = google_article_id(page.url)
+    if not article_id:
+        raise HTTPException(status_code=422, detail="기사 목록에 있는 기사 주소만 요약할 수 있습니다.")
+    if not page.page_url.startswith(("https://", "http://")):
+        raise HTTPException(status_code=422, detail="기사 페이지 주소가 올바르지 않습니다.")
+    result = await summarize_page(page.html, page.page_url, page.subject.strip())
+    result["via"] = "browser"
+    return await _store_summary(_summary_key(article_id, page.subject), result)
+
+
 async def _single_market_briefing(api: TossApiClient, market: str, refresh: bool) -> dict:
-    key = f"insight:market-briefing:v5:{market}"
+    key = f"insight:market-briefing:v9:{market}"
     if not refresh:
         cached = await get_json(key)
         if cached is not None:
@@ -259,7 +317,7 @@ async def market_briefing(
         if market != "all":
             return await _single_market_briefing(api, market, refresh)
 
-        key = "insight:market-briefing:v5:all"
+        key = "insight:market-briefing:v9:all"
         if not refresh:
             cached = await get_json(key)
             if cached is not None:

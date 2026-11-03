@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "시장 분석 기사 읽기 도우미",
+  "version": "1.0.0",
+  "description": "시장 분석 서비스가 자동으로 읽지 못한 기사를 사용자 브라우저로 열어 본문을 서버에 전달합니다.",
+  "permissions": ["tabs", "scripting"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["http://127.0.0.1:9000/*", "http://localhost:9000/*"],
+      "js": ["bridge.js"],
+      "run_at": "document_start"
+    }
+  ]
+}
