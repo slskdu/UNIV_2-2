@@ -5,3 +5,13 @@ services:
     ports:
       - "6379:6379"
     restart: unless-stopped
+    # 회원 계정·토스 키(암호화)·관심 종목·가상 투자·추천 기록이 들어 있어 디스크에 오래 남깁니다.
+    # appendonly: 변경할 때마다 기록(1초마다 디스크에 반영)해 갑자기 꺼져도 거의 잃지 않습니다. save: 주기적 스냅샷도 함께.
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--save", "900", "1", "--save", "300", "10", "--save", "60", "10000"]
+    volumes:
+      - redis-data:/data
+
+volumes:
+  # 이름 있는 저장 공간: docker compose down 후 다시 up 해도 데이터가 유지됩니다(down -v 로만 지워짐).
+  redis-data:
+    name: toss-ranking-redis-data

@@ -16,7 +16,7 @@ AI_LABELS: dict[str, tuple[str, int]] = {
     "강한 호재": (POSITIVE, 2), "호재": (POSITIVE, 1), "중립": (NEUTRAL, 0),
     "악재": (NEGATIVE, -1), "강한 악재": (NEGATIVE, -2), "무관": (UNRELATED, 0),
 }
-AI_TIMEOUT_SECONDS = 30.0
+AI_TIMEOUT_SECONDS = 15.0
 
 # 기사 제목에서 찾는 표현과 점수(+ 호재, - 악재). 긴 표현을 먼저 찾아 지운 뒤 짧은 표현을 찾으므로
 # "적자 축소"가 "적자"로, "목표가 하향"이 "하향"으로 중복 집계되지 않습니다.
@@ -218,7 +218,7 @@ def tone_price_signal(digest: dict[str, Any], change_rate: float | None, period_
     return f"기사 논조({digest['tone']})와 {rate_text}의 방향이 일치합니다."
 
 
-AI_BATCH_SIZE = 20  # 한 번에 너무 많이 보내면 AI가 제목 일부를 빠뜨려 개수가 어긋납니다.
+AI_BATCH_SIZE = 40  # 한 번에 너무 많이 보내면 AI가 제목 일부를 빠뜨려 개수가 어긋납니다(그 묶음만 규칙으로 남김).
 AI_CONCURRENCY = 2
 
 
@@ -254,6 +254,7 @@ async def classify_and_digest(
     subject: str,
     days: int,
     with_summary: bool = True,
+    use_ai: bool = True,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """규칙 기반 분류를 기본으로 하고, AI_API_KEY가 있으면 AI 분류·요약으로 보강합니다.
 
@@ -262,7 +263,7 @@ async def classify_and_digest(
     """
     classified = [{**article, "tone_source": "rule"} for article in classify_articles(articles)]
     digest = build_digest(classified, subject, days)
-    if not ai_enabled() or not classified:
+    if not use_ai or not ai_enabled() or not classified:
         return classified, digest
 
     titles = [article.get("title_ko") or article["title"] for article in classified]

@@ -56,14 +56,27 @@ async def gauge_snapshot(api: TossApiClient, symbol: str, label: str) -> dict[st
     }
 
 
-async def sector_news_tone(api: TossApiClient, sector: dict[str, Any], market_country: str) -> dict[str, Any]:
-    """분야 하나의 최근 기사 논조. AI가 있으면 AI로 분류하고(요약문은 만들지 않음), 없으면 규칙 기반입니다."""
+async def sector_news_tone(
+    api: TossApiClient,
+    sector: dict[str, Any],
+    market_country: str,
+    sector_stocks: list[dict[str, Any]] | None = None,
+    use_ai: bool = True,
+) -> dict[str, Any]:
+    """분야 하나의 최근 기사 논조. AI가 있으면 AI로 분류하고(요약문은 만들지 않음), 없으면 규칙 기반입니다.
+
+    sector_stocks를 주면 구성 종목을 다시 조회하지 않습니다(섹터 API 한도 절약).
+    use_ai=False면 규칙 기반으로만 분류합니다(뒤에 더 중요한 AI 호출이 있어 한도를 아낄 때).
+    """
     overseas = market_country == "US"
-    try:
-        stocks = (await api.fetch_sector_stocks(sector["sector_id"], market_country))[:NEWS_STOCKS]
-    except Exception:
-        logger.exception("sector stocks failed: %s", sector["sector_id"])
-        stocks = []
+    if sector_stocks is not None:
+        stocks = sector_stocks[:NEWS_STOCKS]
+    else:
+        try:
+            stocks = (await api.fetch_sector_stocks(sector["sector_id"], market_country))[:NEWS_STOCKS]
+        except Exception:
+            logger.exception("sector stocks failed: %s", sector["sector_id"])
+            stocks = []
     if stocks:
         stocks = await with_english_names(api, stocks[:1]) + stocks[1:]
     # 한글 분야명 검색은 국내 기사가 대부분이라, 미장은 그 분야의 미국 대표 종목 기사만 봅니다.
@@ -71,7 +84,7 @@ async def sector_news_tone(api: TossApiClient, sector: dict[str, Any], market_co
         sector["name"], stocks, us_listed=overseas, world_stocks=1, include_sector=not (overseas and stocks)
     )
     articles = await attach_korean_titles(await collect_news(targets, days=NEWS_DAYS, per_target=10, max_articles=30))
-    classified, digest = await classify_and_digest(articles, sector["name"], NEWS_DAYS, with_summary=False)
+    classified, digest = await classify_and_digest(articles, sector["name"], NEWS_DAYS, with_summary=False, use_ai=use_ai)
 
     def pick(tone: str, reverse: bool) -> list[dict[str, Any]]:
         chosen = sorted(

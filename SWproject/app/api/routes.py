@@ -79,6 +79,35 @@ MARKET_TREND_PAGE = """<!doctype html>
         .briefing-card h4 { margin: 0 0 8px; font-size: 14px; }
         .briefing-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid #edf0f4; }
         .briefing-row:last-child { border-bottom: 0; }
+        .caveat-box { background: #fff8eb; border: 1px solid #f5d9a8; border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.6; margin-bottom: 14px; }
+        .theme-list { display: grid; gap: 12px; }
+        .theme-card ul { margin: 6px 0 0; padding-left: 18px; font-size: 13px; line-height: 1.6; }
+        .theme-card .risks li { color: #b54708; }
+        .theme-card.risk-card { border-color: #f4c7c3; background: #fffbfa; }
+        .theme-card.risk-card .danger li { color: #b42318; }
+        h3.risk-heading { color: #b42318; }
+        .evidence-list { margin: 6px 0 0; padding-left: 0; list-style: none; font-size: 13px; line-height: 1.7; }
+        .evidence-list .plus { color: #027a48; } .evidence-list .minus { color: #b42318; } .evidence-list .zero { color: #667085; }
+        details.evidence summary { cursor: pointer; font-size: 12px; color: #475467; margin-top: 4px; }
+        .sim-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .sim-table th, .sim-table td { padding: 6px 8px; border-bottom: 1px solid #edf0f4; text-align: right; }
+        .sim-table th:first-child, .sim-table td:first-child { text-align: left; }
+        .sim-verdict { border-radius: 10px; padding: 12px 14px; margin: 8px 0 12px; font-size: 15px; line-height: 1.6; }
+        .sim-verdict.good { background: #ecfdf3; border: 1px solid #a6f4c5; color: #05603a; }
+        .sim-verdict.bad { background: #fef3f2; border: 1px solid #fda29b; color: #912018; }
+        .sim-verdict.mixed { background: #f2f4f7; border: 1px solid #d0d5dd; color: #344054; }
+        .sim-big { font-size: 22px; font-weight: 700; display: block; margin-top: 2px; }
+        .sim-bars { display: grid; gap: 6px; margin: 8px 0; }
+        .sim-bar { display: grid; grid-template-columns: minmax(120px, 190px) 1fr 72px; gap: 8px; align-items: center; font-size: 13px; }
+        .sim-bar .track { position: relative; height: 16px; background: #f2f4f7; border-radius: 4px; }
+        .sim-bar .track span { position: absolute; top: 0; bottom: 0; border-radius: 4px; }
+        .sim-bar .zero { position: absolute; top: -2px; bottom: -2px; width: 1px; background: #98a2b3; }
+        .sim-bar .value { text-align: right; font-weight: 600; }
+        .win-badge { display: inline-block; min-width: 20px; padding: 0 6px; border-radius: 999px; font-size: 12px; font-weight: 700; text-align: center; }
+        .win-badge.win { background: #ecfdf3; color: #027a48; } .win-badge.lose { background: #fef3f2; color: #b42318; }
+        .pick-stock { border-top: 1px solid #edf0f4; padding: 10px 0 2px; }
+        .pick-stock strong { cursor: pointer; }
+        .pick-stock strong:hover { text-decoration: underline; }
         .stat.clickable:hover, .briefing-row.clickable:hover { background: #fff8f8; }
         @media (max-width: 680px) { .briefing-grid { grid-template-columns: 1fr; } }
         .section-head { display: flex; justify-content: space-between; align-items: end; gap: 12px; flex-wrap: wrap; padding: 18px 18px 12px; }
@@ -96,6 +125,19 @@ MARKET_TREND_PAGE = """<!doctype html>
         .chip-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
         .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 12px 0; }
         .stat { background: #f8fafc; border-radius: 8px; padding: 10px 12px; }
+        .trade-banner { border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.6; margin-bottom: 12px; }
+        .trade-banner.off { background: #f2f4f7; border: 1px solid #d0d5dd; }
+        .trade-banner.on { background: #fef3f2; border: 1px solid #fda29b; color: #912018; }
+        .order-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        .search-results { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+        .search-results button { font-size: 13px; padding: 4px 10px; }
+        .order-form input { width: 120px; }
+        .order-preview { border: 1px solid #e1e5eb; border-radius: 10px; padding: 12px 14px; margin-top: 10px; font-size: 14px; line-height: 1.7; }
+        .order-preview .problem { color: #b42318; }
+        .order-preview .note { color: #b54708; }
+        button.danger { background: #d92d20; border-color: #d92d20; color: white; }
+        .status-card .line-pos { color: #d33d4d; } .status-card .line-neg { color: #2672c8; } .status-card .line-warn { color: #b54708; }
+        .status-card ul { margin: 6px 0 0; padding-left: 18px; font-size: 13px; line-height: 1.6; }
         .stat small { display: block; color: #667085; font-size: 12px; margin-bottom: 3px; }
         .stat strong { font-size: 15px; }
         .chart { width: 100%; height: 220px; display: block; }
@@ -105,7 +147,7 @@ MARKET_TREND_PAGE = """<!doctype html>
         .flow-table tr.selected { background: #fff1f1; }
         .news-list { list-style: none; padding: 0 6px 0 0; margin: 0; display: grid; gap: 9px; max-height: 720px; overflow-y: auto; }
         .article-summary { margin-top: 6px; padding: 9px 11px; background: #f8fafc; border-radius: 6px; font-size: 13px; line-height: 1.6; color: #344054; }
-        button.summary-button { padding: 2px 9px; font-size: 12px; border-radius: 999px; margin-left: 6px; }
+        button.summary-button, button.ai-summary-button { padding: 2px 9px; font-size: 12px; border-radius: 999px; margin-left: 6px; }
         button.news-filter { border-radius: 999px; padding: 5px 12px; font-size: 12px; }
         button.news-filter.active { background: #172033; color: white; }
         .news-list li { border-bottom: 1px solid #edf0f4; padding-bottom: 9px; font-size: 14px; }
@@ -127,6 +169,9 @@ MARKET_TREND_PAGE = """<!doctype html>
             <button class="view-tab" data-view-target="ranking">시장 랭킹</button>
             <button class="view-tab" data-view-target="sector">분야 흐름·기사</button>
             <button class="view-tab" data-view-target="history">기간별 주가 흐름</button>
+            <button class="view-tab" data-view-target="recommend">AI분석</button>
+            <button class="view-tab" data-view-target="account">내 계좌</button>
+            <button class="view-tab" data-view-target="virtual">가상 투자</button>
         </nav>
         <section class="panel" id="briefing-panel" data-view="briefing" style="margin-bottom: 18px;">
             <div class="section-head">
@@ -134,6 +179,34 @@ MARKET_TREND_PAGE = """<!doctype html>
                 <div class="form-row"><select id="briefing-market" aria-label="분석 시장"><option value="all">통합(비교)</option><option value="kr" selected>국장</option><option value="us">미장</option></select><button id="briefing-refresh" type="button">다시 분석</button></div>
             </div>
             <div class="pad" id="briefing-body"><p class="empty">시장 분석을 불러오는 중입니다. 10초쯤 걸립니다.</p></div>
+        </section>
+        <section class="panel" id="virtual-panel" data-view="virtual" hidden style="margin-bottom: 18px;">
+            <div class="section-head">
+                <div><h2 class="section-title">가상 투자</h2><div class="subtitle">가상의 돈으로 추천대로 투자했다면 어떻게 됐을지(과거), 앞으로 어떻게 되는지(오늘부터) 금액으로 보여 줍니다. 실제 주문은 나가지 않습니다.</div></div>
+            </div>
+            <div class="pad" id="virtual-body">
+                <div class="briefing-card"><h4>① 과거로 가상 투자해 보기</h4>
+                    <p class="analysis-meta" style="text-align:left;margin:0 0 8px">정한 금액으로, 과거 날짜마다 근거 점수 상위 종목을 같은 금액씩 정수 주로 사고 보유 기간이 지나면 팔아 다시 샀다면 얼마가 됐을지 계산합니다(시뮬레이션과 같은 규칙, 거래 비용 차감).</p>
+                    <div class="order-form"><select id="vb-market" aria-label="시장"><option value="kr">국장</option><option value="us">미장</option></select><input id="vb-capital" type="number" min="100000" step="100000" value="10000000" aria-label="시작 금액(원)" style="width:150px"><span class="code">원</span><select id="vb-horizon" aria-label="보유 기간"><option value="20">20거래일마다 교체</option><option value="5">5거래일마다 교체</option></select><select id="vb-top" aria-label="종목 수"><option value="5">5종목</option><option value="3">3종목</option><option value="10">10종목</option></select><select id="vb-months" aria-label="기간"><option value="12">최근 1년</option><option value="6">최근 6개월</option><option value="3">최근 3개월</option></select><button type="button" data-virtual-action="backtest">가상 투자 실행</button></div>
+                    <div id="vb-result"></div></div>
+                <div class="briefing-card" style="margin-top:12px"><h4>② 오늘부터 추천대로 가상 투자</h4>
+                    <p class="analysis-meta" style="text-align:left;margin:0 0 8px">AI분석 탭의 지금 추천 종목을 같은 금액씩 <strong>다음 거래일 시가</strong>에 산 것으로 치고, 종료일 종가까지 매일 평가합니다. 같은 돈을 지수에 넣었을 때와 비교합니다.</p>
+                    <div id="vp-form"></div><div id="vp-list"></div></div>
+            </div>
+        </section>
+        <section class="panel" id="account-panel" data-view="account" hidden style="margin-bottom: 18px;">
+            <div class="section-head">
+                <div><h2 class="section-title">내 계좌 <span class="code" id="account-updated"></span></h2><div class="subtitle">토스증권 계좌의 보유 종목·주문 가능 금액, 매수·매도 주문, 보유·관심 종목 현황입니다.</div></div>
+                <div class="form-row"><button id="account-refresh" type="button">새로고침</button></div>
+            </div>
+            <div class="pad" id="account-body"><p class="empty">탭을 열면 계좌를 불러옵니다.</p></div>
+        </section>
+        <section class="panel" id="recommend-panel" data-view="recommend" hidden style="margin-bottom: 18px;">
+            <div class="section-head">
+                <div><h2 class="section-title">AI 분석 · 추천과 위험 <span class="code" id="recommend-updated"></span></h2><div class="subtitle">시장 분석 결과(분야 흐름 · 기사 논조 · 종목 주가 흐름)로 추천 테마·종목과 위험 테마·종목을 고르고, AI가 분석해 고른 종목을 근거와 함께 보여 줍니다.</div></div>
+                <div class="form-row"><select id="recommend-market" aria-label="추천 시장"><option value="kr" selected>국장</option><option value="us">미장</option></select><button id="recommend-refresh" type="button">다시 계산</button></div>
+            </div>
+            <div class="pad" id="recommend-body"><p class="empty">탭을 열면 분석을 시작합니다.</p></div>
         </section>
         <nav class="tabs market-tabs" data-view="ranking" aria-label="시장 선택">
             <button class="tab market-tab active" data-market="all">통합</button>
@@ -417,7 +490,8 @@ MARKET_TREND_PAGE = """<!doctype html>
             }).join("")}</ul>`;
         }
         const hasExtension = () => Boolean(document.documentElement.dataset.tossExtension);
-        async function loadSummary(item, toggle, force) {
+        // 자동으로 불러오는 요약은 AI 없이(본문 추출·매체 설명문) 만들어 AI 한도를 아끼고, "AI 요약"을 누른 기사만 AI로 다시 요약합니다.
+        async function loadSummary(item, toggle, force, useAi = false) {
             const box = item.querySelector(".article-summary"), button = item.querySelector(".summary-button");
             if (force) delete box.dataset.state;
             if (box.dataset.state) {
@@ -426,7 +500,7 @@ MARKET_TREND_PAGE = """<!doctype html>
             }
             box.dataset.state = "loading"; box.hidden = false; box.textContent = "기사 본문을 읽어 요약하는 중입니다."; button.textContent = "요약 접기";
             try {
-                const params = new URLSearchParams({ url: item.dataset.url, subject: item.dataset.subject || "", title: item.dataset.title || "", edition: item.dataset.edition || "", published: item.dataset.published || "" });
+                const params = new URLSearchParams({ url: item.dataset.url, subject: item.dataset.subject || "", title: item.dataset.title || "", edition: item.dataset.edition || "", published: item.dataset.published || "", ai: useAi ? "true" : "false" });
                 (item.dataset.alts || "").split(" ").filter(Boolean).forEach(alt => params.append("alt", alt));
                 const data = await fetchJson(`/api/v1/article-summary?${params}`);
                 item.dataset.summary = data.ok && !data.blocked ? "ok" : data.blocked ? "blocked" : "fail";
@@ -448,7 +522,9 @@ MARKET_TREND_PAGE = """<!doctype html>
                     try { altHost = data.alternate ? new URL(data.alternate.publisher_url).hostname.replace(/^www[.]/, "") : ""; } catch (error) { altHost = "다른 매체"; }
                     const via = (data.via === "browser" ? " · 브라우저로 읽음" : "") + (data.alternate ? ` · 원문이 막혀 같은 내용의 ${altHost} 기사로 요약` : "");
                     const filing = data.filing ? `<div style="font-weight:600;margin-bottom:4px">${escapeHtml(data.filing.description)} <a href="${String(data.filing.url).startsWith("https://www.sec.gov/") ? escapeHtml(data.filing.url) : "#"}" target="_blank" rel="noopener noreferrer" class="code">공시 원문</a></div>` : "";
-                    box.innerHTML = `${filing}${escapeHtml(data.summary_ko || data.summary)} <span class="code">(${origin}${language}${via})</span>`;
+                    const aiMissed = useAi && !["ai", "sec", "title"].includes(data.source) ? '<div class="code">AI가 지금 응답하지 않아 본문에서 뽑은 요약을 보여 줍니다. 잠시 뒤 다시 눌러 보세요.</div>' : "";
+                    const aiButton = (data.ai_available && !["ai", "sec", "title"].includes(data.source) ? '<button type="button" class="ghost ai-summary-button" title="AI가 본문을 읽고 다시 요약합니다">AI 요약</button>' : "") + aiMissed;
+                    box.innerHTML = `${filing}${escapeHtml(data.summary_ko || data.summary)} <span class="code">(${origin}${language}${via})</span>${aiButton}`;
                     if (data.summary_ko) box.title = data.summary;
                 } else { box.innerHTML = `<span class="code">${escapeHtml(data.reason)}</span>`; }
                 item.dataset.fallback = data.ok && data.blocked ? "1" : "";
@@ -507,8 +583,40 @@ MARKET_TREND_PAGE = """<!doctype html>
         function loadTopSummaries(root) {
             root.querySelectorAll(".news-list li[data-url]").forEach(item => summaryObserver.observe(item));
         }
-        function digestMarkup(digest, signal) {
-            const counts = `<div class="chip-row" style="margin:8px 0"><span class="chip pos">호재 ${digest.positive}</span><span class="chip neg">악재 ${digest.negative}</span><span class="chip">중립 ${digest.neutral}</span>${digest.unrelated ? `<span class="chip" style="opacity:.6" title="주가와 관계없는 기사라 논조 계산에서 뺐습니다">무관 ${digest.unrelated}</span>` : ""}${digest.strong_positive || digest.strong_negative ? `<span class="chip">강한 호재 ${digest.strong_positive || 0} · 강한 악재 ${digest.strong_negative || 0}</span>` : ""}<span class="chip">논조 ${escapeHtml(digest.tone)}</span><span class="chip">${digest.method === "ai" ? "AI 분류" : digest.method === "ai_partial" ? `AI 분류 ${Math.round((digest.ai_coverage || 0) * 100)}% · 나머지 규칙` : "규칙 기반 분류"}</span></div>`;
+        // 기사 목록은 규칙 기반 분류로 먼저 오고(ai_pending), AI 분류가 끝나면 같은 주소에서 바뀐 판정을 받아 덧입힙니다.
+        const AI_POLL_MS = 4000, AI_POLL_LIMIT = 30;
+        async function followAiUpgrade(root, url, report, isCurrent) {
+            if (!report.ai_pending) return;
+            for (let attempt = 0; attempt < AI_POLL_LIMIT; attempt++) {
+                await new Promise(resolve => setTimeout(resolve, AI_POLL_MS));
+                if (!isCurrent()) return;
+                let next;
+                try { next = await fetchJson(url); } catch (error) { continue; }
+                if (!isCurrent()) return;
+                if (!next.ai_pending) { applyAiLabels(root, next); return; }
+            }
+            const status = root.querySelector(".ai-pending");
+            if (status) status.textContent = "AI 분류가 늦어져 규칙 기반 판정을 표시합니다";
+        }
+        function applyAiLabels(root, report) {
+            const digest = root.querySelector(".news-digest");
+            if (digest) digest.innerHTML = digestMarkup(report.news_digest, report.tone_price_signal);
+            const byUrl = new Map(report.articles.map(article => [String(article.url || ""), article]));
+            root.querySelectorAll(".news-list li[data-url]").forEach(item => {
+                const article = byUrl.get(item.dataset.url);
+                // 요약하면서 본문 기준으로 다시 판정한 기사는 그 판정을 유지합니다.
+                if (!article || item.querySelector(".body-tone")) return;
+                item.dataset.tone = article.tone;
+                item.querySelector(".tone-chip").outerHTML = toneChip(article.tone, article.tone_strong);
+            });
+            root.querySelectorAll(".news-list").forEach(list => {
+                const active = list.previousElementSibling?.querySelector(".news-filter.active");
+                if (active?.dataset.tone) list.querySelectorAll("li").forEach(item => { item.hidden = item.dataset.tone !== active.dataset.tone; });
+                refreshFilterCounts(list);
+            });
+        }
+        function digestMarkup(digest, signal, pending) {
+            const counts = `<div class="chip-row" style="margin:8px 0"><span class="chip pos">호재 ${digest.positive}</span><span class="chip neg">악재 ${digest.negative}</span><span class="chip">중립 ${digest.neutral}</span>${digest.unrelated ? `<span class="chip" style="opacity:.6" title="주가와 관계없는 기사라 논조 계산에서 뺐습니다">무관 ${digest.unrelated}</span>` : ""}${digest.strong_positive || digest.strong_negative ? `<span class="chip">강한 호재 ${digest.strong_positive || 0} · 강한 악재 ${digest.strong_negative || 0}</span>` : ""}<span class="chip">논조 ${escapeHtml(digest.tone)}</span><span class="chip${pending ? " ai-pending" : ""}">${pending ? "규칙 기반 분류 · AI 분류 진행 중" : digest.method === "ai" ? "AI 분류" : digest.method === "ai_partial" ? `AI 분류 ${Math.round((digest.ai_coverage || 0) * 100)}% · 나머지 규칙` : "규칙 기반 분류"}</span></div>`;
             return `<p style="margin:0">${escapeHtml(digest.summary)}</p>${counts}${signal ? `<div class="signal">${escapeHtml(signal)}</div>` : ""}<p class="analysis-meta" style="text-align:left;margin:0 0 10px">${escapeHtml(digest.caveat)}</p>`;
         }
         function mountChart(container, candles, currency, markers = []) {
@@ -577,10 +685,12 @@ MARKET_TREND_PAGE = """<!doctype html>
                 news.innerHTML = '<h3>관련 기사</h3><p class="analysis-meta" style="text-align:left">기사를 불러오는 중입니다.</p>';
                 const days = document.getElementById("news-days").value;
                 try {
-                    const report = await fetchJson(`/api/v1/stock-news?symbol=${encodeURIComponent(data.symbol)}&days=${days}`);
+                    const newsUrl = `/api/v1/stock-news?symbol=${encodeURIComponent(data.symbol)}&days=${days}`;
+                    const report = await fetchJson(newsUrl);
                     if (request !== historyRequest) return;
-                    news.innerHTML = `<h3>${escapeHtml(report.name)} 관련 기사 (최근 ${report.news_days}일)</h3>${digestMarkup(report.news_digest, report.tone_price_signal)}${newsMarkup(report.articles)}`;
+                    news.innerHTML = `<h3>${escapeHtml(report.name)} 관련 기사 (최근 ${report.news_days}일)</h3><div class="news-digest">${digestMarkup(report.news_digest, report.tone_price_signal, report.ai_pending)}</div>${newsMarkup(report.articles)}`;
                     loadTopSummaries(news);
+                    followAiUpgrade(news, newsUrl, report, () => request === historyRequest);
                 } catch (error) { if (request === historyRequest) news.innerHTML = `<h3>관련 기사</h3><p class="error" style="padding:10px 0">기사를 불러오지 못했습니다. (${escapeHtml(error.message)})</p>`; }
             } catch (error) {
                 if (request !== historyRequest) return;
@@ -611,7 +721,8 @@ MARKET_TREND_PAGE = """<!doctype html>
             root.innerHTML = '<p class="empty">분야 기사와 구성 종목을 불러오는 중입니다.</p>';
             root.scrollIntoView({ behavior: "smooth", block: "start" });
             try {
-                const report = await fetchJson(`/api/v1/sectors/${encodeURIComponent(sectorId)}/report?market=${market}&days=${days}`);
+                const reportUrl = `/api/v1/sectors/${encodeURIComponent(sectorId)}/report?market=${market}&days=${days}`;
+                const report = await fetchJson(reportUrl);
                 if (request !== sectorRequest) return;
                 const durationLabels = { "1d": "1일", "1w": "1주", "1mo": "20일", "3mo": "60일", "6mo": "120일", "1y": "1년" };
                 const rates = Object.entries(report.rates).map(([duration, value]) => rateChip(durationLabels[duration] || duration, value)).join("");
@@ -624,8 +735,9 @@ MARKET_TREND_PAGE = """<!doctype html>
                     <div class="chip-row">${rates}</div>${children}
                     <h3>시가총액 상위 종목 (전체 ${report.stock_count}개 · 거래대금 표시 · 누르면 주가 흐름)</h3><div class="chip-row">${stocks || "-"}</div>
                     <h3>지정 기간 분야 흐름</h3><div class="form-row"><input id="sector-start" type="date" aria-label="분야 흐름 시작일" value="${escapeHtml(document.getElementById("history-start").value)}"><input id="sector-end" type="date" aria-label="분야 흐름 종료일" value="${escapeHtml(document.getElementById("history-end").value)}"><button type="button" id="sector-trend-button" class="ghost">이 기간으로 계산</button></div><div id="sector-trend"></div>
-                    <h3>기사 논조 (최근 ${report.news_days}일)</h3>${digestMarkup(report.news_digest, report.tone_price_signal)}${newsMarkup(report.articles)}`;
+                    <h3>기사 논조 (최근 ${report.news_days}일)</h3><div class="news-digest">${digestMarkup(report.news_digest, report.tone_price_signal, report.ai_pending)}</div>${newsMarkup(report.articles)}`;
                 loadTopSummaries(root);
+                followAiUpgrade(root, reportUrl, report, () => request === sectorRequest);
             } catch (error) {
                 if (request === sectorRequest) root.innerHTML = `<p class="error">분야 정보를 불러오지 못했습니다. (${escapeHtml(error.message)})</p>`;
             }
@@ -709,6 +821,710 @@ MARKET_TREND_PAGE = """<!doctype html>
                 ${sampleMarkup}
                 <p class="analysis-meta" style="text-align:left;margin-top:14px">${escapeHtml(data.caveat)}</p>`;
         }
+        // AI 분석 탭: 규칙으로 고른 추천·위험 테마와 종목, AI가 고른 추천·위험 종목을 근거와 함께 보여 줍니다(참고용).
+        let recommendLoaded = false, recommendRequest = 0;
+        const listMarkup = (items, cls) => items.length ? `<ul class="${cls}">${items.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : "";
+        function stockHead(stock, market, themeButton) {
+            const warnings = stock.warnings.map(warning => `<span class="chip neg">${escapeHtml(warning.label)}</span>`).join("");
+            const theme = themeButton && stock.theme_sector_id ? `<button type="button" class="ghost" data-sector="${escapeHtml(stock.theme_sector_id)}" data-market="${market}" title="분야 기사와 구성 종목 보기">${escapeHtml(stock.theme)} 테마</button>` : "";
+            return `<div class="chip-row"><strong class="clickable" data-symbol="${escapeHtml(stock.symbol)}" title="기간별 주가 흐름 보기">${escapeHtml(stock.name)}</strong><span class="code">${escapeHtml(stock.symbol)} · ${priceLabel(stock.close, stock.currency)}</span>${theme}</div>
+                <div class="chip-row" style="margin-top:6px">${rateChip("5일", stock.rates["5d"])}${rateChip("20일", stock.rates["20d"])}${rateChip("60일", stock.rates["60d"])}${warnings}${evidenceChip(stock.evidence)}</div>${evidenceDetails(stock.evidence)}`;
+        }
+        // 추천 근거 모듈(app/signals.py): 근거 10가지를 +·0·−로 판정해 0~100점으로 묶은 값과 그 내역.
+        function evidenceChip(evidence) {
+            if (!evidence || evidence.score === null || evidence.score === undefined) return "";
+            const cls = evidence.score >= 65 ? "pos" : evidence.score < 35 ? "neg" : "";
+            return `<span class="chip ${cls}" title="근거 10가지를 합친 점수(50이 중립)">근거 ${evidence.score}점 · ${escapeHtml(evidence.grade)}</span>`;
+        }
+        function evidenceDetails(evidence) {
+            if (!evidence || !evidence.factors?.length) return "";
+            const mark = signal => signal > 0 ? ["plus", "✓"] : signal < 0 ? ["minus", "✕"] : ["zero", "·"];
+            const items = evidence.factors.map(factor => { const [cls, symbol] = mark(factor.signal); return `<li class="${cls}">${symbol} <strong>${escapeHtml(factor.label)}</strong> — ${escapeHtml(factor.value)} <span class="code">${escapeHtml(factor.text)}</span></li>`; }).join("");
+            return `<details class="evidence"><summary>근거 보기 (긍정 ${evidence.factors.filter(factor => factor.signal > 0).length} · 부정 ${evidence.factors.filter(factor => factor.signal < 0).length})</summary><ul class="evidence-list">${items}</ul></details>`;
+        }
+        // 통합 추천: AI·테마 양쪽 추천을 합친 목록(기존 "AI 추천 종목"·"추천 테마" 칸은 그대로 둡니다).
+        function viaChips(pick) {
+            return (pick.via || []).map(via => `<span class="chip ${via === "ai" ? "pos" : ""}">${via === "ai" ? "AI 추천" : "테마 추천"}</span>`).join("");
+        }
+        function combinedMarkup(pick, market) {
+            const reasons = pick.reason ? [pick.reason] : (pick.reasons || []);
+            const risks = pick.risk ? [pick.risk] : (pick.risks || []);
+            return `<div class="briefing-card theme-card"><div class="chip-row" style="margin-bottom:6px">${viaChips(pick)}<button type="button" class="ghost" data-open-order="${escapeHtml(pick.symbol)}" title="내 계좌 탭의 주문 칸에 채웁니다">이 종목 주문하기</button></div>${stockHead(pick, market, true)}
+                ${listMarkup(reasons, "")}${listMarkup(risks, "risks")}</div>`;
+        }
+        function aiPickMarkup(pick, market, risky) {
+            const order = risky ? "" : `<div style="margin-top:6px"><button type="button" class="ghost" data-open-order="${escapeHtml(pick.symbol)}" title="내 계좌 탭의 주문 칸에 채웁니다">이 종목 주문하기</button></div>`;
+            return `<div class="briefing-card theme-card${risky ? " risk-card" : ""}">${order}${stockHead(pick, market, true)}
+                ${risky ? listMarkup([pick.reason], "danger") : listMarkup([pick.reason], "") + (pick.risk ? listMarkup([pick.risk], "risks") : "")}</div>`;
+        }
+        function recommendStock(stock, market, risky) {
+            // 위험 종목은 위험 근거를 붉게, 반대로 볼 점을 기본색으로 보여 줍니다.
+            const body = risky ? listMarkup(stock.reasons, "danger") + listMarkup(stock.risks, "") : listMarkup(stock.reasons, "") + listMarkup(stock.risks, "risks");
+            return `<div class="pick-stock">${stockHead(stock, market, false)}${body}</div>`;
+        }
+        function recommendTheme(theme, market) {
+            const risky = theme.kind === "risk";
+            const news = theme.news && theme.news.article_count ? `<span class="chip pos">호재 ${theme.news.positive}</span><span class="chip neg">악재 ${theme.news.negative}</span><span class="chip">논조 ${escapeHtml(theme.news.tone)}</span>` : '<span class="chip">기사 없음</span>';
+            const stocks = theme.stocks.length ? theme.stocks.map(stock => recommendStock(stock, market, risky)).join("") : `<p class="analysis-meta" style="text-align:left;margin:8px 0 0">조건에 맞는 ${risky ? "위험" : "추천"} 종목을 찾지 못했습니다.</p>`;
+            const labels = risky
+                ? ["위험 근거", "반대로 볼 점", "이 테마의 위험 종목 (위험 점수 순)"]
+                : ["근거", "주의할 점", "이 테마의 추천 종목 (테마 안에서 비교한 점수 순)"];
+            return `<div class="briefing-card theme-card${risky ? " risk-card" : ""}"><h4 class="clickable" data-sector="${escapeHtml(theme.sector_id)}" data-market="${market}" title="분야 기사와 구성 종목 보기">${escapeHtml(theme.name)} ${flowChip(theme.flow)}</h4>
+                <div class="chip-row">${periodChips(theme.rates, ["1d", "1w", "1mo", "3mo"])}${news}</div>
+                <div class="code" style="margin-top:8px">${labels[0]}</div>${listMarkup(theme.reasons, risky ? "danger" : "")}
+                ${theme.risks.length ? `<div class="code" style="margin-top:6px">${labels[1]}</div>${listMarkup(theme.risks, risky ? "" : "risks")}` : ""}
+                <div class="code" style="margin-top:10px">${labels[2]}</div>${stocks}</div>`;
+        }
+        function renderRecommendations(data) {
+            const market = data.market.toLowerCase();
+            const section = (kind, title, note, cls = "") => {
+                const themes = data.themes.filter(theme => theme.kind === kind);
+                return `<h3 class="${cls}">${title} <span class="code">${note}</span></h3><div class="theme-list">${themes.length ? themes.map(theme => recommendTheme(theme, market)).join("") : '<p class="analysis-meta" style="text-align:left">지금 조건에 맞는 분야가 없습니다.</p>'}</div>`;
+            };
+            const aiMissing = '<p class="analysis-meta" style="text-align:left">AI가 지금 응답하지 않아 고르지 못했습니다. 아래 테마별 종목을 참고하시고, 잠시 뒤 "다시 계산"을 눌러 보세요.</p>';
+            const aiRisk = data.method !== "ai" ? aiMissing
+                : data.ai_risk_picks.length ? `<div class="theme-list">${data.ai_risk_picks.map(pick => aiPickMarkup(pick, market, true)).join("")}</div>`
+                : '<p class="analysis-meta" style="text-align:left">AI가 특히 주의할 종목을 따로 고르지 않았습니다. 아래 위험 테마의 종목을 참고하세요.</p>';
+            const flagged = data.flagged_stocks.length
+                ? `<h3 class="risk-heading">매수 유의사항으로 추천에서 뺀 종목 <span class="code">추천 테마에 속하지만 투자경고·위험·정리매매가 걸린 종목</span></h3><div class="theme-list">${data.flagged_stocks.map(stock => `<div class="briefing-card theme-card risk-card">${stockHead(stock, market, true)}${listMarkup(stock.reasons, "danger")}</div>`).join("")}</div>`
+                : "";
+            document.getElementById("recommend-updated").textContent = `${data.generated_at} 기준`;
+            document.getElementById("recommend-body").innerHTML = `
+                <div class="caveat-box"><strong>참고용 분석입니다.</strong> ${escapeHtml(data.caveat.replace("참고용 분석입니다. ", ""))}</div>
+                <p class="briefing-summary">${escapeHtml(data.summary)} <span class="chip">${data.method === "ai" ? "AI 분석" : "규칙 기반 분석"}</span></p>
+                ${(data.combined_picks || []).length ? `<h3>통합 추천 종목 <span class="code">AI 추천과 테마 추천을 합친 상위 ${data.combined_picks.length}종목 · 양쪽에서 모두 추천된 종목 → 나머지 AI 추천 → 테마 종목(근거 점수 순)</span></h3><div class="theme-list">${data.combined_picks.map(pick => combinedMarkup(pick, market)).join("")}</div>` : ""}
+                <h3>AI 추천 종목 <span class="code">추천 테마의 종목 ${data.ai_pool_size}개를 AI가 비교해 고른 종목</span></h3>
+                ${data.ai_picks.length ? `<div class="theme-list">${data.ai_picks.map(pick => aiPickMarkup(pick, market, false)).join("")}</div>` : aiMissing}
+                <h3 class="risk-heading">AI 위험 종목 <span class="code">위험 테마 종목과 유의사항 종목 ${data.ai_risk_pool_size}개 중 AI가 특히 주의할 종목으로 고른 것 · 매도 권유 아님</span></h3>
+                ${aiRisk}
+                ${section("trend", "추천 테마 · 추세 강세", "1주·20일 모두 오른 분야 중 점수 순")}
+                ${section("rebound", "추천 테마 · 반등 시도", "하락하다 최근 1주 반등한 분야 중 반등 폭 순")}
+                ${section("risk", "위험 테마", "하락 지속·상승 후 꺾임 분야 우선, 모자라면 20일이 마이너스인 약한 분야 · 약한 순", "risk-heading")}
+                ${flagged}
+                <p class="analysis-meta" style="text-align:left;margin-top:14px">계산 방법: ${escapeHtml(data.method_note)}</p>
+                <div id="validation-section">${validationShell()}</div>`;
+            loadSimulation(false);
+            loadTrack();
+        }
+        // 내 계좌: 보유 종목, 주문(미리보기 → 확인), 미체결 주문 취소, 관심 종목 현황.
+        // 주문·취소·관심 종목 변경은 X-Toss-Order 헤더를 붙여 보냅니다(서버가 다른 사이트의 요청을 거르는 데 씁니다).
+        let accountLoaded = false, accountRequest = 0, accountTrading = null;
+        async function sendJson(url, body, method = "POST") {
+            const response = await fetch(url, { method, headers: { "Content-Type": "application/json", "X-Toss-Order": "1" }, body: body === undefined ? undefined : JSON.stringify(body) });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : `HTTP ${response.status}`);
+            return data;
+        }
+        function moneyText(value, currency) {
+            if (value === null || value === undefined) return "-";
+            return currency === "USD" ? `$${Number(value).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `${Math.round(Number(value)).toLocaleString("ko-KR")}원`;
+        }
+        function signedClass(value) { return value > 0 ? "positive" : value < 0 ? "negative" : ""; }
+        function rateText(value) { return value === null || value === undefined ? "-" : `${value > 0 ? "+" : ""}${Number(value).toFixed(2)}%`; }
+        function renderAccount(data) {
+            const holdings = data.holdings, trading = data.trading;
+            accountTrading = trading;
+            const banner = trading.enabled
+                ? `<div class="trade-banner on"><strong>실제 주문 켜짐.</strong> 이 화면의 주문은 토스증권 실제 계좌에서 바로 체결됩니다(모의투자 없음). 1회 예상 금액 상한: ${moneyText(trading.max_amount.KRW, "KRW")} · ${moneyText(trading.max_amount.USD, "USD")}</div>`
+                : !trading.server_enabled
+                ? '<div class="trade-banner off"><strong>실제 주문 꺼짐(서버).</strong> 이 서버는 실제 주문을 받지 않도록 설정되어 있어 미리보기까지만 됩니다(서버 관리자가 <span class="code">.env</span>의 <span class="code">TRADING_ENABLED</span>로 켭니다).</div>'
+                : '<div class="trade-banner off"><strong>실제 주문 꺼짐(내 계정).</strong> 미리보기까지만 됩니다. 실제로 주문하려면 위 계정 설정에서 "실제 주문 허용"을 켜세요. 토스증권 Open API에는 모의투자가 없어 주문은 실제로 체결됩니다.</div>';
+            const stat = (label, value, cls = "") => `<div class="stat"><small>${label}</small><strong class="${cls}">${value}</strong></div>`;
+            const rows = holdings.items.map(item => `<tr><td class="name"><strong class="clickable" data-symbol="${escapeHtml(item.symbol)}" title="기간별 주가 흐름 보기">${escapeHtml(item.name)}</strong> <span class="code">${escapeHtml(item.symbol)}</span></td><td>${Number(item.quantity).toLocaleString("ko-KR")}</td><td>${moneyText(item.average_price, item.currency)}</td><td>${moneyText(item.last_price, item.currency)}</td><td>${moneyText(item.market_value, item.currency)}</td><td class="${signedClass(item.profit_loss)}">${moneyText(item.profit_loss, item.currency)} (${rateText(item.profit_rate)})</td><td class="${signedClass(item.daily_rate)}">${rateText(item.daily_rate)}</td><td><button type="button" class="ghost" data-action="buy" data-symbol-value="${escapeHtml(item.symbol)}">매수</button> <button type="button" class="ghost" data-action="sell" data-symbol-value="${escapeHtml(item.symbol)}" data-quantity="${escapeHtml(String(item.quantity))}">매도</button> <button type="button" class="ghost" data-action="watch" data-symbol-value="${escapeHtml(item.symbol)}">관심</button></td></tr>`).join("");
+            const orders = data.open_orders.length ? data.open_orders.map(order => `<div class="briefing-row"><span><strong>${escapeHtml(order.name || order.symbol)}</strong> <span class="chip ${order.side === "BUY" ? "pos" : "neg"}">${escapeHtml(order.side_label)}</span> <span class="chip">${escapeHtml(order.order_type_label)}</span> ${order.price !== null ? moneyText(order.price, order.currency) : "시장가"} × ${order.quantity} (체결 ${order.filled_quantity}) · <span class="code">${escapeHtml(order.status_label)} · ${escapeHtml(order.ordered_at || "")}</span></span>${order.cancelable && trading.enabled ? `<button type="button" class="ghost" data-action="cancel" data-order="${escapeHtml(order.order_id)}">취소</button>` : ""}</div>`).join("") : '<p class="analysis-meta" style="text-align:left">미체결 주문이 없습니다.</p>';
+            document.getElementById("account-updated").textContent = `${data.generated_at} 기준 · 계좌 ${data.account.number}`;
+            document.getElementById("account-body").innerHTML = `${accountBar(accountUser)}${banner}
+                <div class="stat-grid">${stat("평가금액", moneyText(holdings.market_value.krw, "KRW"))}${stat("총 손익", `${moneyText(holdings.profit_loss.krw, "KRW")} (${rateText(holdings.profit_rate)})`, signedClass(holdings.profit_loss.krw))}${stat("오늘 손익", `${moneyText(holdings.daily_profit_loss.krw, "KRW")} (${rateText(holdings.daily_rate)})`, signedClass(holdings.daily_profit_loss.krw))}${stat("주문 가능 (원)", moneyText(data.buying_power.KRW, "KRW"))}${stat("주문 가능 (달러)", moneyText(data.buying_power.USD, "USD"))}</div>
+                <h3>보유 종목 <span class="code">${holdings.items.length}개 · 손익률은 토스증권 기준</span></h3>
+                ${holdings.items.length ? `<div class="table-wrap"><table><thead><tr><th>종목</th><th>수량</th><th>평균가</th><th>현재가</th><th>평가금액</th><th>손익</th><th>오늘</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p class="analysis-meta" style="text-align:left">보유 종목이 없습니다.</p>'}
+                <h3>주문 <span class="code">미리보기로 금액·주문 가능 여부를 확인한 뒤 보냅니다</span></h3>
+                <div class="order-form"><input id="order-symbol" placeholder="종목 이름 또는 코드 (삼성전자, NVDA)" aria-label="종목 이름 또는 코드" autocomplete="off" data-search="order" style="width:230px"><select id="order-side" aria-label="매수/매도"><option value="BUY">매수</option><option value="SELL">매도</option></select><select id="order-type" aria-label="주문 유형"><option value="LIMIT">지정가</option><option value="MARKET">시장가</option></select><input id="order-quantity" type="number" min="0" step="any" placeholder="수량" aria-label="수량"><input id="order-price" type="number" min="0" step="any" placeholder="가격(지정가)" aria-label="가격"><select id="order-price-currency" aria-label="가격 단위"><option value="USD">달러($)</option><option value="KRW">원(₩)</option></select><button type="button" data-action="preview">주문 미리보기</button></div>
+                <div class="search-results" id="order-search"></div>
+                <div class="code" id="order-quote" style="margin-top:6px">종목 이름이나 코드를 넣고 목록에서 고르면 거래 통화와 최근 가격이 나옵니다.</div>
+                <div id="order-preview"></div>
+                <h3>미체결 주문</h3>${orders}
+                <h3>보유·관심 종목 현황 <span class="code">최근 등락 · 20·60일 흐름 · 평균선 · 변동성 · 유의사항 · 보유 손익 · 기사 논조</span></h3>
+                <div class="form-row" style="margin-bottom:4px"><input id="watch-symbol" placeholder="관심 종목 이름 또는 코드 (삼성전자, NVDA)" aria-label="관심 종목 이름 또는 코드" autocomplete="off" data-search="watch" style="width:260px"><button type="button" data-action="watch-add">관심 종목 추가</button></div><div class="search-results" id="watch-search"></div>
+                <div id="stock-status"><p class="analysis-meta" style="text-align:left">종목 현황을 불러오는 중입니다.</p></div>`;
+            loadStockStatus();
+            if (pendingOrder) { const order = pendingOrder; pendingOrder = null; fillOrder(order.symbol, order.side, order.quantity); }
+        }
+        async function loadStockStatus() {
+            const root = document.getElementById("stock-status");
+            if (!root) return;
+            try {
+                const [status, watch] = await Promise.all([fetchJson("/api/v1/account/stock-status"), fetchJson("/api/v1/watchlist")]);
+                const watched = new Set(watch.items.map(item => item.symbol));
+                root.innerHTML = status.stocks.length ? `<div class="briefing-grid">${status.stocks.map(stock => `<div class="briefing-card status-card"><div class="chip-row"><strong class="clickable" data-symbol="${escapeHtml(stock.symbol)}" title="기간별 주가 흐름·기사 보기">${escapeHtml(stock.name)}</strong><span class="code">${escapeHtml(stock.symbol)}</span>${stock.held ? '<span class="chip pos">보유</span>' : ""}${watched.has(stock.symbol) ? '<span class="chip">관심</span>' : ""}<button type="button" class="ghost" data-action="buy" data-symbol-value="${escapeHtml(stock.symbol)}">매수</button>${stock.held ? `<button type="button" class="ghost" data-action="sell" data-symbol-value="${escapeHtml(stock.symbol)}">매도</button>` : ""}${watched.has(stock.symbol) ? `<button type="button" class="ghost" data-action="watch-remove" data-symbol-value="${escapeHtml(stock.symbol)}">관심 해제</button>` : ""}</div><ul>${stock.lines.map(line => `<li class="line-${line.tone}">${escapeHtml(line.text)}</li>`).join("")}</ul>${stock.news_loaded ? "" : '<div class="code">기사 논조는 종목 이름을 눌러 기사를 한 번 불러오면 함께 표시됩니다.</div>'}</div>`).join("")}</div>` : '<p class="analysis-meta" style="text-align:left">보유 종목도 관심 종목도 없습니다. 위에서 관심 종목을 추가해 보세요.</p>';
+            } catch (error) { root.innerHTML = `<p class="error">종목 현황을 불러오지 못했습니다. (${escapeHtml(error.message)})</p>`; }
+        }
+        // 로그인: 각자 자기 토스 키로 로그인합니다. 세션은 HttpOnly 쿠키라 화면 코드에서는 읽을 수 없습니다.
+        let accountUser = null, authMeta = {};
+        const KEY_GUIDE = `<details style="margin:10px 0"><summary>토스증권 API 키 만드는 법</summary><ol style="font-size:13px;line-height:1.7;margin:6px 0">
+            <li>토스증권 PC(WTS) <strong>설정 &gt; Open API</strong>에서 키를 발급받아 client_id와 client_secret을 확인합니다.</li>
+            <li>같은 화면의 <strong>허용 IP 관리</strong>에 이 서비스 서버의 공인 IP를 추가합니다(없으면 연결이 거절됩니다).</li>
+            <li>아래에 두 값을 넣고 연결합니다. client_secret은 서버에 암호화해 저장되고, 화면에 다시 보여 주지 않습니다.</li>
+            <li>이 키는 내 계좌의 조회와 주문 권한을 가집니다. 믿을 수 있는 서버에만 등록하고, 쓰지 않으면 "키 삭제"를 누르거나 토스 앱에서 키를 폐기하세요.</li></ol></details>`;
+        function accountBar(user) {
+            if (!user) return "";
+            const trading = user.trading_enabled
+                ? '<button type="button" class="ghost" data-action="trading-off">실제 주문 허용 끄기</button>'
+                : `<input id="trading-password" type="password" placeholder="비밀번호 확인" aria-label="비밀번호 확인" autocomplete="current-password" style="width:140px"><button type="button" class="ghost" data-action="trading-on">실제 주문 허용 켜기</button>`;
+            return `<div class="briefing-card" style="margin-bottom:12px"><div class="chip-row"><strong>${escapeHtml(user.username)}</strong><span class="chip">${user.toss_connected ? `토스 키 ${escapeHtml(user.toss_client_id)}` : "토스 키 없음"}</span><span class="chip ${user.trading_enabled ? "neg" : ""}">실제 주문 ${user.trading_enabled ? "허용" : "꺼짐"}</span>
+                ${user.toss_connected ? trading + ' <button type="button" class="ghost" data-action="key-remove">키 삭제</button>' : ""}
+                <button type="button" class="ghost" data-action="logout">로그아웃</button>
+                <details style="display:inline-block"><summary class="code" style="cursor:pointer">회원 탈퇴</summary><input id="delete-password" type="password" placeholder="비밀번호" aria-label="탈퇴 비밀번호" autocomplete="current-password" style="width:120px"> <button type="button" class="danger" data-action="delete-account">탈퇴</button></details></div></div>`;
+        }
+        function renderAuth() {
+            const invite = authMeta.invite_required ? '<input id="auth-invite" placeholder="초대 코드" aria-label="초대 코드" style="width:140px">' : "";
+            document.getElementById("account-updated").textContent = "";
+            document.getElementById("account-body").innerHTML = `<p class="briefing-summary">로그인하면 내 토스증권 계좌의 보유 종목을 보고 주문하며, 관심 종목 현황을 볼 수 있습니다. 계좌는 각자 자기 토스 API 키로 연결합니다.</p>
+                <div class="order-form" style="margin:10px 0"><input id="auth-username" placeholder="아이디" aria-label="아이디" autocomplete="username" style="width:150px"><input id="auth-password" type="password" placeholder="비밀번호(8자 이상)" aria-label="비밀번호" autocomplete="current-password" style="width:170px">${invite}<button type="button" data-action="login">로그인</button>${authMeta.signup_enabled ? '<button type="button" class="ghost" data-action="signup">회원가입</button>' : ""}</div>
+                <div id="auth-message"></div>${KEY_GUIDE}`;
+        }
+        function renderKeyForm() {
+            document.getElementById("account-updated").textContent = "";
+            document.getElementById("account-body").innerHTML = `${accountBar(accountUser)}<h3>토스증권 계좌 연결</h3>${KEY_GUIDE}
+                <div class="order-form"><input id="key-client-id" placeholder="client_id" aria-label="client_id" autocomplete="off" style="width:240px"><input id="key-client-secret" type="password" placeholder="client_secret" aria-label="client_secret" autocomplete="off" style="width:240px"><button type="button" data-action="key-save">연결</button></div>
+                <div id="auth-message"></div>
+                <h3>관심 종목 현황 <span class="code">계좌를 연결하지 않아도 관심 종목은 볼 수 있습니다</span></h3>
+                <div class="form-row" style="margin-bottom:4px"><input id="watch-symbol" placeholder="관심 종목 이름 또는 코드 (삼성전자, NVDA)" aria-label="관심 종목 이름 또는 코드" autocomplete="off" data-search="watch" style="width:260px"><button type="button" data-action="watch-add">관심 종목 추가</button></div><div class="search-results" id="watch-search"></div>
+                <div id="stock-status"></div>`;
+            loadStockStatus();
+        }
+        async function loadAccount() {
+            const body = document.getElementById("account-body"), request = ++accountRequest;
+            accountLoaded = true;
+            body.innerHTML = '<p class="empty">계정을 확인하는 중입니다.</p>';
+            try {
+                const me = await fetchJson("/api/v1/auth/me");
+                if (request !== accountRequest) return;
+                authMeta = me;
+                accountUser = me.logged_in ? me.user : null;
+                if (!accountUser) { renderAuth(); return; }
+                if (!accountUser.toss_connected) { renderKeyForm(); return; }
+                body.innerHTML = '<p class="empty">토스증권 계좌를 불러오는 중입니다.</p>';
+                const data = await fetchJson("/api/v1/account/summary");
+                if (request === accountRequest) renderAccount(data);
+            } catch (error) {
+                if (request === accountRequest) body.innerHTML = `${accountBar(accountUser)}<p class="error">계좌를 불러오지 못했습니다. (${escapeHtml(error.message)})</p>`;
+            }
+        }
+        async function authAction(action) {
+            const message = document.getElementById("auth-message");
+            const show = text => { if (message) message.innerHTML = `<p class="error" style="padding:6px 0">${escapeHtml(text)}</p>`; else alert(text); };
+            try {
+                if (action === "login" || action === "signup") {
+                    await sendJson(`/api/v1/auth/${action}`, { username: document.getElementById("auth-username").value.trim(), password: document.getElementById("auth-password").value, invite_code: document.getElementById("auth-invite")?.value || "" });
+                } else if (action === "logout") {
+                    await sendJson("/api/v1/auth/logout", {});
+                } else if (action === "key-save") {
+                    if (message) message.innerHTML = '<p class="analysis-meta" style="text-align:left">토스에 연결해 키를 확인하는 중입니다.</p>';
+                    await sendJson("/api/v1/auth/toss-key", { client_id: document.getElementById("key-client-id").value, client_secret: document.getElementById("key-client-secret").value });
+                } else if (action === "key-remove") {
+                    await sendJson("/api/v1/auth/toss-key", undefined, "DELETE");
+                } else if (action === "trading-on") {
+                    await sendJson("/api/v1/auth/trading", { enabled: true, password: document.getElementById("trading-password").value });
+                } else if (action === "trading-off") {
+                    await sendJson("/api/v1/auth/trading", { enabled: false });
+                } else if (action === "delete-account") {
+                    await sendJson("/api/v1/auth/delete-account", { password: document.getElementById("delete-password").value });
+                }
+                loadAccount();
+            } catch (error) { show(error.message); }
+        }
+        function renderPreview(preview) {
+            const box = document.getElementById("order-preview");
+            const amount = preview.estimated_amount !== null ? moneyText(preview.estimated_amount, preview.currency) : "-";
+            const available = preview.side === "BUY" ? `주문 가능 금액 ${moneyText(preview.buying_power, preview.currency)}` : `매도 가능 ${preview.sellable_quantity}주`;
+            const problems = preview.problems.map(text => `<div class="problem">✕ ${escapeHtml(text)}</div>`).join("");
+            const notes = preview.notes.map(text => `<div class="note">! ${escapeHtml(text)}</div>`).join("");
+            const action = preview.confirm_token
+                ? `<div style="margin-top:8px"><button type="button" class="danger" data-action="confirm" data-token="${escapeHtml(preview.confirm_token)}">실제로 ${escapeHtml(preview.side_label)} 주문 보내기</button> <button type="button" class="ghost" data-action="preview-cancel">취소</button> <span class="code">${preview.confirm_seconds}초 안에 눌러야 하며, 누르면 실제 계좌에서 주문이 체결됩니다.</span></div>`
+                : !preview.trading_enabled ? '<div class="code" style="margin-top:8px">실제 주문이 꺼져 있어 미리보기까지만 됩니다.</div>'
+                : '<div class="code" style="margin-top:8px">위 문제를 고친 뒤 다시 미리보기를 하세요.</div>';
+            box.innerHTML = `<div class="order-preview"><strong>${escapeHtml(preview.name)}</strong> <span class="code">${escapeHtml(preview.symbol)}</span> <span class="chip ${preview.side === "BUY" ? "pos" : "neg"}">${escapeHtml(preview.side_label)}</span> <span class="chip">${escapeHtml(preview.order_type_label)}</span>
+                <div>수량 ${preview.quantity}주 · 가격 ${preview.input_price_krw ? `${moneyText(preview.input_price_krw, "KRW")} → <strong>${moneyText(preview.price, "USD")}</strong>` : preview.price !== null && preview.price !== undefined ? moneyText(preview.price, preview.currency) : "시장가"} · 최근 종가 ${moneyText(preview.last_price, preview.currency)}</div>
+                <div>예상 금액 <strong>${amount}</strong>${preview.estimated_amount_krw ? ` (약 ${moneyText(preview.estimated_amount_krw, "KRW")})` : ""} · ${available}${preview.fx_rate ? ` · 환율 1달러 = ${Number(preview.fx_rate).toLocaleString("ko-KR", { maximumFractionDigits: 2 })}원(참고용)` : ""}</div>${problems}${notes}${action}</div>`;
+        }
+        document.getElementById("account-refresh").addEventListener("click", () => loadAccount());
+        // 종목코드를 넣으면 거래 통화를 보여 주고 가격 단위를 맞춥니다. 토스 주문은 국내 주식을 원, 미국 주식을 달러로만 받으며,
+        // 미국 주식은 원으로 입력해도 서버가 환율로 달러로 바꿔 주문합니다.
+        // 종목 이름 검색: 토스 전체 종목 목록에서 서버가 찾아 줍니다. 목록에서 누르면 주문 칸(또는 관심 종목)에 들어갑니다.
+        let searchTimer = null, searchRequest = 0, pendingOrder = null;
+        function stockSearch(input) {
+            const kind = input.dataset.search, box = document.getElementById(`${kind}-search`), query = input.value.trim();
+            clearTimeout(searchTimer);
+            if (!box) return;
+            if (!query) { box.innerHTML = ""; return; }
+            searchTimer = setTimeout(async () => {
+                const request = ++searchRequest;
+                try {
+                    const data = await fetchJson(`/api/v1/stocks/search?q=${encodeURIComponent(query)}`);
+                    if (request !== searchRequest) return;
+                    box.innerHTML = data.results.length
+                        ? data.results.map(item => `<button type="button" class="ghost" data-action="pick-stock" data-kind="${kind}" data-symbol-value="${escapeHtml(item.symbol)}">${escapeHtml(item.name)} <span class="code">${escapeHtml(item.symbol)} · ${escapeHtml(item.market)}</span></button>`).join("")
+                        : "";  // 결과가 없으면 아무것도 보여 주지 않습니다(입력 중간에 문구가 깜빡이지 않게)
+                } catch (error) { if (request === searchRequest) box.innerHTML = ""; }
+            }, 250);
+        }
+        function fillOrder(symbol, side, quantity) {
+            const input = document.getElementById("order-symbol");
+            if (!input) { pendingOrder = { symbol, side, quantity }; return; }
+            input.value = symbol;
+            if (side) document.getElementById("order-side").value = side;
+            document.getElementById("order-quantity").value = quantity || "";
+            document.getElementById("order-search").innerHTML = "";
+            loadOrderQuote();
+            input.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+        document.getElementById("account-body").addEventListener("input", event => { if (event.target.dataset?.search) stockSearch(event.target); });
+        document.getElementById("recommend-body").addEventListener("click", event => {
+            const button = event.target.closest("[data-open-order]");
+            if (!button) return;
+            event.stopPropagation();
+            pendingOrder = { symbol: button.dataset.openOrder, side: "BUY" };
+            setView("account");
+            if (document.getElementById("order-symbol")) { const order = pendingOrder; pendingOrder = null; fillOrder(order.symbol, order.side); }
+        }, true);
+        let quoteRequest = 0;
+        async function loadOrderQuote() {
+            const input = document.getElementById("order-symbol"), note = document.getElementById("order-quote"), unit = document.getElementById("order-price-currency");
+            if (!input || !note) return;
+            const symbol = input.value.trim(), request = ++quoteRequest;
+            if (!symbol) { note.textContent = "종목코드를 넣으면 거래 통화와 최근 가격이 나옵니다."; unit.disabled = false; return; }
+            note.textContent = "종목을 확인하는 중입니다.";
+            try {
+                const quote = await fetchJson(`/api/v1/account/quote?symbol=${encodeURIComponent(symbol)}`);
+                if (request !== quoteRequest) return;
+                if (quote.currency === "KRW") {
+                    unit.value = "KRW"; unit.disabled = true;
+                    note.textContent = `${quote.name}: 원으로 거래하는 국내 주식 · 최근 종가 ${moneyText(quote.last_price, "KRW")} · 가격은 원 단위 정수로 입력`;
+                } else {
+                    unit.disabled = false;
+                    if (unit.value !== "KRW") unit.value = "USD";
+                    const fx = quote.fx ? ` · 1달러 = ${Number(quote.fx.mid).toLocaleString("ko-KR", { maximumFractionDigits: 2 })}원(참고용)` : "";
+                    const krw = quote.fx && quote.last_price ? ` (약 ${moneyText(quote.last_price * quote.fx.mid, "KRW")})` : "";
+                    note.textContent = `${quote.name}: 달러로 거래하는 미국 주식 · 최근 종가 ${moneyText(quote.last_price, "USD")}${krw}${fx} · 가격을 원으로 넣으면 달러로 바꿔 주문합니다`;
+                }
+            } catch (error) { if (request === quoteRequest) note.textContent = `종목 정보를 불러오지 못했습니다. (${error.message})`; }
+        }
+        document.getElementById("account-body").addEventListener("change", event => { if (event.target.id === "order-symbol") loadOrderQuote(); });
+        document.getElementById("account-body").addEventListener("click", async event => {
+            const target = event.target.closest("[data-action], [data-symbol]");
+            if (!target) return;
+            const action = target.dataset.action, box = document.getElementById("order-preview");
+            if (["login", "signup", "logout", "key-save", "key-remove", "trading-on", "trading-off", "delete-account"].includes(action)) { authAction(action); return; }
+            try {
+                if (!action) { showHistory(target.dataset.symbol); return; }
+                if (action === "sell" || action === "buy") {
+                    fillOrder(target.dataset.symbolValue, action === "sell" ? "SELL" : "BUY", target.dataset.quantity);
+                } else if (action === "pick-stock") {
+                    const kind = target.dataset.kind;
+                    document.getElementById(`${kind}-search`).innerHTML = "";
+                    if (kind === "order") { fillOrder(target.dataset.symbolValue, null); }
+                    else {
+                        document.getElementById("watch-symbol").value = "";
+                        await sendJson("/api/v1/watchlist", { symbol: target.dataset.symbolValue });
+                        loadStockStatus();
+                    }
+                } else if (action === "preview") {
+                    if (!/^[A-Za-z0-9.-]{1,15}$/.test(document.getElementById("order-symbol").value.trim())) {
+                        // 이름만 넣은 경우 종목을 추측해 주문하지 않습니다(같은 이름이 여러 개일 수 있음).
+                        box.innerHTML = '<div class="order-preview"><div class="problem">✕ 종목 이름을 넣었다면 위 검색 목록에서 종목을 눌러 골라 주세요.</div></div>';
+                        return;
+                    }
+                    box.innerHTML = '<p class="analysis-meta" style="text-align:left">주문 내용을 확인하는 중입니다.</p>';
+                    const price = document.getElementById("order-price").value;
+                    renderPreview(await sendJson("/api/v1/account/orders/preview", {
+                        symbol: document.getElementById("order-symbol").value.trim(), side: document.getElementById("order-side").value,
+                        order_type: document.getElementById("order-type").value, quantity: Number(document.getElementById("order-quantity").value),
+                        price: document.getElementById("order-type").value === "LIMIT" && price ? Number(price) : null,
+                        price_currency: document.getElementById("order-price-currency").value,
+                    }));
+                } else if (action === "preview-cancel") {
+                    box.innerHTML = "";
+                } else if (action === "confirm") {
+                    target.disabled = true;
+                    const result = await sendJson("/api/v1/account/orders/confirm", { confirm_token: target.dataset.token });
+                    box.innerHTML = `<div class="order-preview"><strong>주문을 보냈습니다.</strong> ${escapeHtml(result.name)} ${escapeHtml(result.side === "BUY" ? "매수" : "매도")} ${result.quantity}주 · 주문번호 <span class="code">${escapeHtml(result.order_id || "-")}</span><div class="code">체결 여부는 아래 미체결 주문과 보유 종목에서 확인하세요.</div></div>`;
+                    setTimeout(loadAccount, 1500);
+                } else if (action === "cancel") {
+                    if (target.dataset.armed !== "1") { target.dataset.armed = "1"; target.textContent = "정말 취소?"; target.classList.add("danger"); return; }
+                    target.disabled = true;
+                    await sendJson(`/api/v1/account/orders/${encodeURIComponent(target.dataset.order)}/cancel`, {});
+                    setTimeout(loadAccount, 1000);
+                } else if (action === "watch" || action === "watch-add") {
+                    let symbol = action === "watch" ? target.dataset.symbolValue : document.getElementById("watch-symbol").value.trim();
+                    if (!symbol) return;
+                    if (action === "watch-add" && !/^[A-Za-z0-9.-]{1,15}$/.test(symbol)) {
+                        // 이름을 넣고 바로 추가를 누르면 검색 결과 첫 종목을 담습니다.
+                        const found = (await fetchJson(`/api/v1/stocks/search?q=${encodeURIComponent(symbol)}`)).results[0];
+                        if (!found) throw new Error("찾는 종목이 없습니다.");
+                        symbol = found.symbol;
+                        document.getElementById("watch-search").innerHTML = "";
+                    }
+                    await sendJson("/api/v1/watchlist", { symbol });
+                    if (action === "watch-add") document.getElementById("watch-symbol").value = "";
+                    loadStockStatus();
+                } else if (action === "watch-remove") {
+                    await sendJson(`/api/v1/watchlist/${encodeURIComponent(target.dataset.symbolValue)}`, undefined, "DELETE");
+                    loadStockStatus();
+                }
+            } catch (error) {
+                if (["preview", "confirm"].includes(action)) box.innerHTML = `<div class="order-preview"><div class="problem">✕ ${escapeHtml(error.message)}</div></div>`;
+                else alertInline(target, error.message);
+                target.disabled = false;
+            }
+        });
+        function alertInline(target, message) {
+            const note = document.createElement("div");
+            note.className = "error"; note.style.padding = "4px 0"; note.textContent = message;
+            target.insertAdjacentElement("afterend", note);
+            setTimeout(() => note.remove(), 5000);
+        }
+        // 가상 투자: ① 과거로 가상 투자(백테스트를 금액으로) ② 오늘부터 추천대로 가상 포트폴리오.
+        let virtualLoaded = false;
+        function manwon(value) {
+            if (value === null || value === undefined) return "-";
+            const abs = Math.abs(value);
+            const text = abs >= 1e8 ? `${(abs / 1e8).toLocaleString("ko-KR", { maximumFractionDigits: 2 })}억원` : `${(abs / 1e4).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}만원`;
+            return value < 0 ? `-${text}` : text;
+        }
+        function signedManwon(value) { return value === null || value === undefined ? "-" : `${value > 0 ? "+" : ""}${manwon(value)}`; }
+        function equityChart(points, keys) {
+            const usable = points.filter(point => keys.some(([key]) => point[key] !== null && point[key] !== undefined));
+            if (usable.length < 2) return "";
+            const values = usable.flatMap(point => keys.map(([key]) => point[key]).filter(value => value !== null && value !== undefined));
+            const min = Math.min(...values), max = Math.max(...values), span = max - min || 1, width = 640, height = 180, pad = 10;
+            const xy = (value, index) => `${(pad + (width - 2 * pad) * index / (usable.length - 1)).toFixed(1)},${(pad + (height - 2 * pad) * (1 - (value - min) / span)).toFixed(1)}`;
+            const lines = keys.map(([key, color, dashed]) => {
+                const pts = usable.map((point, index) => point[key] === null || point[key] === undefined ? null : xy(point[key], index)).filter(Boolean);
+                return pts.length > 1 ? `<polyline points="${pts.join(" ")}" fill="none" stroke="${color}" stroke-width="2" ${dashed ? 'stroke-dasharray="5 4"' : ""} vector-effect="non-scaling-stroke"></polyline>` : "";
+            }).join("");
+            return `<svg class="chart" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="자산 흐름" style="height:180px">${lines}</svg>
+                <div class="code" style="display:flex;justify-content:space-between"><span>${escapeHtml(usable[0].date)}</span><span>${keys.map(([, color, dashed, label]) => `<span style="color:${color}">${dashed ? "┅" : "━"} ${escapeHtml(label)}</span>`).join(" · ")}</span><span>${escapeHtml(usable.at(-1).date)}</span></div>`;
+        }
+        async function loadVirtual() {
+            virtualLoaded = true;
+            const form = document.getElementById("vp-form"), list = document.getElementById("vp-list");
+            try {
+                const [me, defaults] = await Promise.all([fetchJson("/api/v1/auth/me"), fetchJson("/api/v1/virtual/defaults")]);
+                if (!me.logged_in) {
+                    form.innerHTML = '<p class="analysis-meta" style="text-align:left">가상 포트폴리오는 계정에 저장되므로 로그인이 필요합니다. <button type="button" class="ghost" data-virtual-action="go-login">내 계좌 탭에서 로그인</button></p>';
+                    list.innerHTML = "";
+                    return;
+                }
+                form.innerHTML = `<div class="order-form"><select id="vp-market" aria-label="시장"><option value="kr">국장</option><option value="us">미장</option></select><input id="vp-capital" type="number" min="100000" step="100000" value="10000000" aria-label="투자 금액(원)" style="width:150px"><span class="code">원</span><select id="vp-source" aria-label="따라 살 추천"><option value="all">통합 추천 (AI + 테마)</option><option value="ai">AI 추천 종목만</option><option value="theme">추천 테마 종목만(근거 점수 순)</option><option value="compare">세 가지 모두 만들어 비교</option></select><input id="vp-name" maxlength="40" placeholder="이름 (비워 두면 자동)" aria-label="포트폴리오 이름" style="width:180px"><label class="code">종료일 <input id="vp-end" type="date" value="${escapeHtml(defaults.next_tuesday)}" min="${escapeHtml(defaults.today)}" aria-label="종료일"></label><button type="button" data-virtual-action="create">가상 포트폴리오 만들기</button></div>
+                    <div class="code" style="margin-top:6px">통합 추천은 AI와 테마 양쪽에서 모두 추천된 종목 → 나머지 AI 추천 → 테마 종목(근거 점수 순)으로 최대 5종목을 고릅니다. 종료일 기본값은 다음 화요일(${escapeHtml(defaults.next_tuesday)})이고, 미장은 만들 때 환율로 달러로 바꿉니다.</div><div id="vp-message"></div>`;
+                await loadPortfolios();
+            } catch (error) { form.innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`; }
+        }
+        async function loadPortfolios() {
+            const list = document.getElementById("vp-list");
+            list.innerHTML = '<p class="analysis-meta" style="text-align:left">가상 포트폴리오를 평가하는 중입니다.</p>';
+            try {
+                const data = await fetchJson("/api/v1/virtual/portfolios");
+                if (!data.portfolios.length) { list.innerHTML = '<p class="analysis-meta" style="text-align:left">아직 만든 가상 포트폴리오가 없습니다.</p>'; return; }
+                // "세 가지 모두 비교"로 함께 만든 포트폴리오는 비교 표를 먼저 보여 줍니다.
+                const groups = new Map();
+                data.portfolios.forEach(portfolio => { const key = portfolio.group || portfolio.id; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(portfolio); });
+                list.innerHTML = portfolioSummary(data.portfolios) + [...groups.values()].map(items => (items.length > 1 ? compareTable(items, data.fx_now) : "") + items.map(portfolio => portfolioCard(portfolio, data.fx_now)).join("")).join("");
+            } catch (error) { list.innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`; }
+        }
+        // 내 가상 포트폴리오 전체를 한 표로. 이름을 누르면 그 카드로 이동합니다.
+        function portfolioSummary(items) {
+            const label = { all: "통합", ai: "AI만", theme: "테마만" };
+            const state = { pending: "체결 대기", active: "진행 중", finished: "종료" };
+            const stateText = item => item.status === "active" && item.live ? "진행 중 · 장중" : (state[item.status] || item.status);
+            const rows = items.map(item => {
+                const beat = item.status === "pending" || item.index_return === null || item.index_return === undefined ? null : item.return - item.index_return;
+                return `<tr><td><button type="button" class="ghost" data-virtual-action="jump" data-id="${escapeHtml(item.id)}" style="padding:2px 8px">${escapeHtml(item.name || "")}</button></td><td>${item.market === "KR" ? "국장" : "미장"}</td><td>${escapeHtml(label[item.source] || item.source)}</td><td>${escapeHtml(item.created_date)} → ${escapeHtml(item.end_date)}</td><td>${stateText(item)}</td><td class="${pctClass(item.return)}">${item.status === "pending" ? "-" : pct(item.return)}</td><td class="${pctClass(beat)}">${beat === null ? "-" : `${beat > 0 ? "+" : ""}${(beat * 100).toFixed(2)}%p`}</td></tr>`;
+            }).join("");
+            return `<div class="briefing-card" style="margin-top:10px"><h4>내 가상 포트폴리오 ${items.length}개 <span class="code">최대 50개 · 이름을 누르면 아래 카드로 이동</span></h4>
+                <div class="table-wrap"><table class="sim-table"><thead><tr><th>이름</th><th>시장</th><th>방식</th><th>기간</th><th>상태</th><th>수익률</th><th>지수 대비</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+        }
+        function compareTable(items, fxNow) {
+            const first = items[0], usd = first.currency === "USD";
+            const money = value => value === null || value === undefined ? "-" : usd ? moneyText(value, "USD") : manwon(value);
+            const label = { all: "통합 추천", ai: "AI 추천 종목만", theme: "추천 테마 종목만" };
+            const ready = items.filter(item => item.status !== "pending");
+            const best = ready.length ? ready.reduce((top, item) => item.return > top.return ? item : top) : null;
+            const rows = items.map(item => `<tr><td>${escapeHtml(label[item.source] || item.source)}${best && best.id === item.id ? ' <span class="chip pos">가장 좋음</span>' : ""}</td><td>${item.picks.length}종목</td><td>${item.status === "pending" ? "체결 대기" : money(item.value)}</td><td class="${pctClass(item.return)}">${item.status === "pending" ? "-" : pct(item.return)}</td><td class="${pctClass(item.return - (item.index_return ?? 0))}">${item.status === "pending" || item.index_return === null || item.index_return === undefined ? "-" : `${item.return - item.index_return > 0 ? "+" : ""}${((item.return - item.index_return) * 100).toFixed(2)}%p`}</td></tr>`).join("");
+            const index = ready[0] ? `<tr><td>같은 돈을 ${escapeHtml(ready[0].index_name)}에</td><td>-</td><td>${money(ready[0].index_value)}</td><td class="${pctClass(ready[0].index_return)}">${pct(ready[0].index_return)}</td><td>-</td></tr>` : "";
+            return `<div class="briefing-card" style="margin-top:10px"><h4>세 가지 비교 · ${escapeHtml(first.market === "KR" ? "국장" : "미장")} · ${escapeHtml(first.created_at)} 만듦 · ${escapeHtml(first.end_date)} 종가까지 · 각 ${money(first.capital)}</h4>
+                <div class="table-wrap"><table class="sim-table"><thead><tr><th>추천 방식</th><th>종목 수</th><th>평가액</th><th>수익률</th><th>지수 대비</th></tr></thead><tbody>${rows}${index}</tbody></table></div></div>`;
+        }
+        function portfolioCard(portfolio, fxNow) {
+            const usd = portfolio.currency === "USD";
+            const money = value => value === null || value === undefined ? "-" : usd ? `${moneyText(value, "USD")}${fxNow ? ` (약 ${manwon(value * fxNow)})` : ""}` : manwon(value);
+            const status = { pending: ["체결 대기", ""], active: [portfolio.live ? "진행 중 · 장중" : "진행 중", "pos"], finished: ["종료", "neg"] }[portfolio.status] || [portfolio.status, ""];
+            const sourceLabel = { all: "통합 추천", ai: "AI 추천 종목만", theme: "추천 테마 종목만" }[portfolio.source] || portfolio.source;
+            const head = `<div class="chip-row"><strong style="font-size:15px">${escapeHtml(portfolio.name || sourceLabel)}</strong><span class="chip ${status[1]}">${status[0]}</span><span class="code">${escapeHtml(portfolio.market === "KR" ? "국장" : "미장")} · ${escapeHtml(sourceLabel)} · ${escapeHtml(portfolio.created_at)} 만듦 · ${escapeHtml(portfolio.end_date)} 종가까지 · ${money(portfolio.capital)}</span></div>
+                <div class="chip-row" style="margin:6px 0"><span class="rename-box" data-id="${escapeHtml(portfolio.id)}" hidden><input maxlength="40" value="${escapeHtml(portfolio.name || "")}" aria-label="새 이름" style="width:180px"><button type="button" class="ghost" data-virtual-action="rename-save" data-id="${escapeHtml(portfolio.id)}">저장</button></span>
+                <button type="button" class="ghost" data-virtual-action="rename" data-id="${escapeHtml(portfolio.id)}">이름 바꾸기</button>
+                <button type="button" class="ghost" data-virtual-action="duplicate" data-id="${escapeHtml(portfolio.id)}" data-market="${escapeHtml(portfolio.market.toLowerCase())}" data-capital="${escapeHtml(String(portfolio.capital_krw))}" data-source="${escapeHtml(portfolio.source)}" data-end="${escapeHtml(portfolio.end_date)}" data-name="${escapeHtml(portfolio.name || "")}" title="시장·금액·방식·종료일이 같은 포트폴리오를 오늘 추천대로 하나 더 만듭니다">같은 설정으로 하나 더</button>
+                <button type="button" class="ghost" data-virtual-action="delete" data-id="${escapeHtml(portfolio.id)}">삭제</button></div>`;
+            const viaText = pick => (pick.via || []).map(via => via === "ai" ? "AI" : "테마").join("·");
+            if (portfolio.status === "pending") {
+                return `<div class="briefing-card" id="vp-${escapeHtml(portfolio.id)}" style="margin-top:10px">${head}<p class="briefing-summary">투자 금액 ${money(portfolio.capital)} · ${escapeHtml(portfolio.message || "")}</p><div class="chip-row">${portfolio.picks.map(pick => `<span class="chip">${escapeHtml(pick.name)}${pick.via?.length ? ` <span class="code">${viaText(pick)}</span>` : ""}</span>`).join("")}</div></div>`;
+            }
+            const beat = portfolio.index_return !== null && portfolio.index_return !== undefined ? portfolio.return - portfolio.index_return : null;
+            const holdings = portfolio.holdings.map(holding => holding.status === "bought"
+                ? `<tr><td>${escapeHtml(holding.name)} <span class="code">${escapeHtml(holding.symbol)}${holding.via?.length ? ` · ${viaText(holding)}` : ""}</span></td><td>${holding.shares.toLocaleString("ko-KR")}주</td><td>${escapeHtml(holding.buy_date)} ${moneyText(holding.buy_price, portfolio.currency)}</td><td>${moneyText(holding.last_price, portfolio.currency)}</td><td class="${pctClass(holding.return)}">${pct(holding.return)}</td><td class="${pctClass(holding.profit)}">${usd ? moneyText(holding.profit, "USD") : signedManwon(holding.profit)}</td></tr>`
+                : `<tr><td>${escapeHtml(holding.name)}</td><td colspan="5" class="code">${holding.status === "too_expensive" ? "1주 값이 배정 금액보다 비싸 사지 못함" : "체결 대기"}</td></tr>`).join("");
+            return `<div class="briefing-card" id="vp-${escapeHtml(portfolio.id)}" style="margin-top:10px">${head}
+                <div class="sim-verdict ${portfolio.profit >= 0 ? "good" : "bad"}"><strong>${money(portfolio.capital)} → ${money(portfolio.value)}</strong> (${pct(portfolio.return)}, ${usd ? moneyText(portfolio.profit, "USD") : signedManwon(portfolio.profit)}) · ${escapeHtml(portfolio.as_of)} ${portfolio.live ? "장중 가격 기준(약 5분마다 갱신)" : "종가 기준"}${portfolio.status === "finished" ? " · 최종" : ""}</div>
+                <div class="stat-grid">
+                    <div class="stat"><small>같은 돈을 ${escapeHtml(portfolio.index_name)}에 넣었다면</small><span class="sim-big">${money(portfolio.index_value)}</span><small class="${pctClass(portfolio.index_return)}">${pct(portfolio.index_return)}</small></div>
+                    <div class="stat"><small>지수 대비</small><span class="sim-big ${pctClass(beat)}">${beat === null ? "-" : `${beat > 0 ? "+" : ""}${(beat * 100).toFixed(2)}%p`}</span><small>${beat === null ? "" : beat > 0 ? "지수보다 나음" : "지수보다 못함"}</small></div>
+                    <div class="stat"><small>남은 현금(정수 주로 사고 남은 돈)</small><span class="sim-big">${money(portfolio.cash_left)}</span></div>
+                </div>
+                ${equityChart(portfolio.series, [["value", "#d33d4d", false, "내 가상 포트폴리오"], ["index_value", "#2672c8", true, portfolio.index_name]])}
+                <div class="table-wrap"><table class="sim-table"><thead><tr><th>종목</th><th>수량</th><th>매수(시가)</th><th>현재가</th><th>수익률</th><th>손익</th></tr></thead><tbody>${holdings}</tbody></table></div>
+                <p class="code" style="margin-top:6px">평가액은 지금 팔면 받을 금액(매도 비용 ${(0.15).toFixed(2)}% 차감)입니다.</p></div>`;
+        }
+        function renderVirtualBacktest(root, data) {
+            const usd = data.currency === "USD";
+            const krw = value => value === null || value === undefined ? null : usd ? value * data.fx : value;
+            const won = value => manwon(krw(value));
+            const profit = krw(data.profit);
+            const verdictClass = data.profit > 0 ? (data.return >= (data.index_return ?? -1) ? "good" : "mixed") : "bad";
+            const periodRows = data.periods.slice().reverse().map(period => `<details style="border-bottom:1px solid #edf0f4;padding:6px 0"><summary style="cursor:pointer;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><span>${escapeHtml(period.date)} → ${escapeHtml(period.end)}</span><span>${won(period.start_value)} → <strong>${won(period.end_value)}</strong> <span class="${pctClass(period.return)}">${pct(period.return)}</span></span></summary>
+                <div class="table-wrap"><table class="sim-table"><thead><tr><th>종목</th><th>근거</th><th>주수</th><th>매수가</th><th>매도가</th><th>손익</th></tr></thead><tbody>${period.trades.map(trade => `<tr><td>${escapeHtml(trade.name)}</td><td>${trade.score}점</td><td>${trade.shares.toLocaleString("ko-KR")}주</td><td>${moneyText(trade.buy_price, data.currency)}</td><td>${moneyText(trade.sell_price, data.currency)}</td><td class="${pctClass(trade.profit)}">${signedManwon(krw(trade.profit))} (${pct(trade.return)})</td></tr>`).join("")}</tbody></table></div><div class="code">사고 남은 현금 ${won(period.cash_left)}</div></details>`).join("");
+            root.innerHTML = `<p class="code">${escapeHtml(data.start_date || "")} ~ ${escapeHtml(data.end_date || "")} · ${data.horizon}거래일마다 근거 상위 ${data.top}종목으로 교체 · ${data.period_count}번 · 표본 ${data.universe_size}종목 · 거래 비용 왕복 ${(data.cost * 100).toFixed(1)}%${usd ? ` · 1달러 = ${Number(data.fx).toLocaleString("ko-KR", { maximumFractionDigits: 2 })}원으로 환산` : ""}</p>
+                <div class="sim-verdict ${verdictClass}"><strong>${won(data.capital)} → ${won(data.final_value)}</strong> (${pct(data.return)}, ${signedManwon(profit)})</div>
+                <div class="stat-grid">
+                    <div class="stat"><small>같은 돈을 ${escapeHtml(data.index_name)}에 넣었다면</small><span class="sim-big">${won(data.index_final)}</span><small class="${pctClass(data.index_return)}">${pct(data.index_return)}</small></div>
+                    <div class="stat"><small>표본 종목을 모두 같은 비중으로 샀다면</small><span class="sim-big">${won(data.universe_final)}</span><small class="${pctClass(data.universe_return)}">${pct(data.universe_return)}</small></div>
+                    <div class="stat"><small>돈을 번 기간</small><span class="sim-big">${data.winning_periods} / ${data.period_count}</span></div>
+                </div>
+                ${equityChart(data.equity.map(point => ({ date: point.date, value: krw(point.value), index_value: krw(point.index_value), universe_value: krw(point.universe_value) })), [["value", "#d33d4d", false, "추천대로 투자"], ["index_value", "#2672c8", true, data.index_name], ["universe_value", "#98a2b3", true, "표본 평균"]])}
+                <h4 style="margin:12px 0 4px">기간별 매매 내역 <span class="code">누르면 종목별 주수·매수가·매도가·손익</span></h4>${periodRows}
+                <p class="analysis-meta" style="text-align:left;margin-top:8px">과거 결과이며 앞날을 보장하지 않습니다. 과거의 기사·수급 자료는 없어 기술 지표 근거만 썼고, 지금 상장된 종목만 표본에 들어 있습니다.</p>`;
+        }
+        document.getElementById("virtual-body").addEventListener("click", async event => {
+            const button = event.target.closest("[data-virtual-action]");
+            if (!button) return;
+            const action = button.dataset.virtualAction;
+            if (action === "go-login") { setView("account"); return; }
+            if (action === "backtest") {
+                const root = document.getElementById("vb-result");
+                root.innerHTML = '<p class="analysis-meta" style="text-align:left">과거 주가를 모아 가상 투자를 계산하는 중입니다. 처음에는 30초쯤 걸립니다.</p>';
+                button.disabled = true;
+                try {
+                    renderVirtualBacktest(root, await sendJson("/api/v1/virtual/backtest", {
+                        market: document.getElementById("vb-market").value, capital_krw: Number(document.getElementById("vb-capital").value),
+                        horizon: Number(document.getElementById("vb-horizon").value), top: Number(document.getElementById("vb-top").value),
+                        months: Number(document.getElementById("vb-months").value),
+                    }));
+                } catch (error) { root.innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`; }
+                button.disabled = false;
+            } else if (action === "create") {
+                const message = document.getElementById("vp-message");
+                button.disabled = true;
+                message.innerHTML = '<p class="analysis-meta" style="text-align:left">가상 포트폴리오를 만드는 중입니다. 오늘 이 시장의 추천이 아직 없으면 지금 계산하느라 1~2분 걸립니다.</p>';
+                try {
+                    await sendJson("/api/v1/virtual/portfolios", {
+                        market: document.getElementById("vp-market").value, capital_krw: Number(document.getElementById("vp-capital").value),
+                        source: document.getElementById("vp-source").value, end_date: document.getElementById("vp-end").value || null,
+                        name: document.getElementById("vp-name").value.trim() || null,
+                    });
+                    message.innerHTML = "";
+                    document.getElementById("vp-name").value = "";
+                    await loadPortfolios();
+                } catch (error) { message.innerHTML = `<p class="error" style="padding:6px 0">${escapeHtml(error.message)}</p>`; }
+                button.disabled = false;
+            } else if (action === "jump") {
+                document.getElementById(`vp-${button.dataset.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+            } else if (action === "rename") {
+                const box = document.querySelector(`.rename-box[data-id="${button.dataset.id}"]`);
+                box.hidden = !box.hidden;
+                if (!box.hidden) box.querySelector("input").focus();
+            } else if (action === "rename-save") {
+                const box = document.querySelector(`.rename-box[data-id="${button.dataset.id}"]`);
+                try {
+                    await sendJson(`/api/v1/virtual/portfolios/${encodeURIComponent(button.dataset.id)}`, { name: box.querySelector("input").value.trim() }, "PATCH");
+                    await loadPortfolios();
+                } catch (error) { box.insertAdjacentHTML("beforeend", ` <span class="error">${escapeHtml(error.message)}</span>`); }
+            } else if (action === "duplicate") {
+                button.disabled = true;
+                button.textContent = "만드는 중…";
+                try {
+                    await sendJson("/api/v1/virtual/portfolios", {
+                        market: button.dataset.market, capital_krw: Number(button.dataset.capital), source: button.dataset.source,
+                        end_date: button.dataset.end, name: button.dataset.name || null,
+                    });
+                    await loadPortfolios();
+                } catch (error) {
+                    button.disabled = false;
+                    button.textContent = "같은 설정으로 하나 더";
+                    button.insertAdjacentHTML("afterend", ` <span class="error">${escapeHtml(error.message)}</span>`);
+                }
+            } else if (action === "delete") {
+                if (button.dataset.armed !== "1") { button.dataset.armed = "1"; button.textContent = "정말 삭제?"; return; }
+                await sendJson(`/api/v1/virtual/portfolios/${encodeURIComponent(button.dataset.id)}`, undefined, "DELETE");
+                await loadPortfolios();
+            }
+        });
+        async function loadRecommendations(refresh = false) {
+            const body = document.getElementById("recommend-body"), market = document.getElementById("recommend-market").value;
+            const request = ++recommendRequest;
+            recommendLoaded = true;
+            body.innerHTML = '<p class="empty">분야 흐름·기사·종목 주가·수급을 모아 근거를 따지고 AI가 추천·위험 종목을 분석하는 중입니다. 처음에는 1~2분쯤 걸리고, 그 뒤 30분 동안은 바로 나옵니다.</p>';
+            try {
+                const data = await fetchJson(`/api/v1/recommendations?market=${market}${refresh ? "&refresh=true" : ""}`);
+                if (request === recommendRequest) renderRecommendations(data);
+            } catch (error) {
+                if (request === recommendRequest) body.innerHTML = `<p class="error">AI 분석을 하지 못했습니다. (${escapeHtml(error.message)})</p>`;
+            }
+        }
+        // 추천 성과 검증: ① 과거 데이터 시뮬레이션(백테스트) ② 실제 추천 기록 추적.
+        let simulationTimer = null, simulationRequest = 0;
+        const pct = value => value === null || value === undefined ? "-" : `${value > 0 ? "+" : ""}${(value * 100).toFixed(2)}%`;
+        const pctClass = value => value > 0 ? "positive" : value < 0 ? "negative" : "";
+        function validationShell() {
+            return `<h3>추천 성과 검증</h3>
+                <div class="briefing-card"><h4>① 시뮬레이션 (과거 약 1년 데이터)</h4>
+                <p class="analysis-meta" style="text-align:left;margin:0 0 8px">과거 날짜마다 그날까지의 자료만으로 근거 점수를 매겨 상위 종목을 "추천", 하위 종목을 "위험"으로 골랐다면 그 뒤 수익률이 어땠는지 계산합니다(1~3분).</p>
+                <div class="form-row"><select id="sim-horizon" aria-label="보유 기간"><option value="20">20거래일 보유</option><option value="5">5거래일 보유</option></select><select id="sim-top" aria-label="추천 종목 수"><option value="5">상위 5개</option><option value="3">상위 3개</option><option value="10">상위 10개</option></select><button type="button" data-sim-action="run">시뮬레이션 실행</button></div>
+                <div id="sim-result"></div></div>
+                <div class="briefing-card" style="margin-top:12px"><h4>② 실제 추천 이후 성과 (기록)</h4><div id="track-result"><p class="analysis-meta" style="text-align:left">불러오는 중입니다.</p></div></div>`;
+        }
+        function simParams() {
+            return `market=${document.getElementById("recommend-market").value}&horizon=${document.getElementById("sim-horizon")?.value || 20}&top=${document.getElementById("sim-top")?.value || 5}`;
+        }
+        async function loadSimulation(start) {
+            const root = document.getElementById("sim-result");
+            if (!root) return;
+            clearTimeout(simulationTimer);
+            const request = ++simulationRequest;
+            try {
+                const data = start
+                    ? await sendJson(`/api/v1/simulation?${simParams()}`, {})
+                    : await fetchJson(`/api/v1/simulation?${simParams()}`);
+                if (request !== simulationRequest) return;
+                if (data.status === "none") { root.innerHTML = '<p class="code">아직 오늘 돌린 시뮬레이션이 없습니다. "시뮬레이션 실행"을 누르세요.</p>'; return; }
+                if (data.status === "running") {
+                    root.innerHTML = `<p class="analysis-meta" style="text-align:left">계산 중입니다: ${escapeHtml(data.progress || "")}</p>`;
+                    simulationTimer = setTimeout(() => loadSimulation(false), 3000);
+                    return;
+                }
+                if (data.status === "error") { root.innerHTML = `<p class="error">${escapeHtml(data.progress)}</p>`; return; }
+                renderSimulation(root, data);
+            } catch (error) { if (request === simulationRequest) root.innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`; }
+        }
+        function simulationChart(periods, indexName) {
+            if (periods.length < 2) return "";
+            const lines = { pick: [1], universe: [1], index: [1] };
+            periods.forEach(period => {
+                lines.pick.push(lines.pick.at(-1) * (1 + period.pick_return));
+                lines.universe.push(lines.universe.at(-1) * (1 + period.universe_return));
+                lines.index.push(lines.index.at(-1) * (1 + (period.index_return ?? 0)));
+            });
+            const all = [...lines.pick, ...lines.universe, ...lines.index], min = Math.min(...all), max = Math.max(...all), span = max - min || 1;
+            const width = 640, height = 180, pad = 10;
+            const point = (value, index, count) => `${(pad + (width - 2 * pad) * index / (count - 1)).toFixed(1)},${(pad + (height - 2 * pad) * (1 - (value - min) / span)).toFixed(1)}`;
+            const path = (values, color, dash) => `<polyline points="${values.map((value, index) => point(value, index, values.length)).join(" ")}" fill="none" stroke="${color}" stroke-width="2" ${dash ? 'stroke-dasharray="5 4"' : ""} vector-effect="non-scaling-stroke"></polyline>`;
+            return `<svg class="chart" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="누적 수익률 비교" style="height:180px">${path(lines.universe, "#98a2b3", true)}${path(lines.index, "#2672c8", true)}${path(lines.pick, "#d33d4d", false)}</svg>
+                <div class="code"><span style="color:#d33d4d">━ 추천(근거 상위)</span> · <span style="color:#98a2b3">┅ 표본 평균</span> · <span style="color:#2672c8">┅ ${escapeHtml(indexName)}</span> (누적, 시작=1)</div>`;
+        }
+        // 시뮬레이션 결과를 숫자로 바로 읽히게: 한 줄 결론 → 100만원 예시 → 큰 숫자 → 막대 비교 → 기간별 표(이김/짐).
+        function simBars(items) {
+            const values = items.map(item => item.value).filter(value => value !== null && value !== undefined);
+            if (!values.length) return "";
+            const low = Math.min(0, ...values), high = Math.max(0, ...values), span = high - low || 1;
+            const zero = (0 - low) / span * 100;
+            return `<div class="sim-bars">${items.map(item => {
+                if (item.value === null || item.value === undefined) return "";
+                const left = Math.min(zero, (item.value - low) / span * 100), width = Math.abs(item.value) / span * 100;
+                const color = item.color || (item.value >= 0 ? "#d33d4d" : "#2672c8");
+                return `<div class="sim-bar"><span>${item.label}</span><div class="track"><span style="left:${left}%;width:${Math.max(width, 0.5)}%;background:${color}"></span><i class="zero" style="left:${zero}%"></i></div><span class="value ${pctClass(item.value)}">${pct(item.value)}</span></div>`;
+            }).join("")}</div>`;
+        }
+        function wonText(compound) {
+            if (compound === null || compound === undefined) return "-";
+            return `${(100 * (1 + compound)).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}만원`;
+        }
+        function renderSimulation(root, data) {
+            const summary = data.summary, buckets = summary.score_buckets, periods = data.periods;
+            const total = periods.length, wins = periods.filter(period => period.pick_return > period.universe_return).length;
+            const avoidWins = periods.filter(period => period.avoid_return < period.universe_return).length;
+            const excess = summary.excess_mean, excessPoint = excess === null ? "-" : `${excess > 0 ? "+" : ""}${(excess * 100).toFixed(2)}%p`;
+            const verdictClass = excess > 0 && wins > total / 2 ? "good" : excess < 0 && wins < total / 2 ? "bad" : "mixed";
+            const verdict = verdictClass === "good"
+                ? `<strong>추천 종목이 표본보다 나았습니다.</strong> ${total}번 중 <strong>${wins}번</strong> 앞섰고, 기간당 평균 <strong>${excessPoint}</strong> 더 벌었습니다.`
+                : verdictClass === "bad"
+                ? `<strong>추천 종목이 표본보다 못했습니다.</strong> ${total}번 중 ${wins}번만 앞섰고, 기간당 평균 <strong>${excessPoint}</strong> 차이가 났습니다. 이 시장·기간에는 지금 근거 점수가 잘 맞지 않았습니다.`
+                : `<strong>결과가 엇갈립니다.</strong> ${total}번 중 ${wins}번 앞섰고, 기간당 평균 차이는 ${excessPoint}입니다.`;
+            const pp = value => pct(value).replace("%", "%p");  // 두 수익률의 차이는 %p로 씁니다
+            const sorted = periods.slice().sort((left, right) => (right.pick_return - right.universe_return) - (left.pick_return - left.universe_return));
+            const best = sorted[0], worst = sorted.at(-1);
+            const bigStat = (label, value, cls = "", note = "") => `<div class="stat"><small>${label}</small><span class="sim-big ${cls}">${value}</span>${note ? `<small>${note}</small>` : ""}</div>`;
+            const periodRows = periods.slice().reverse().map(period => {
+                const win = period.pick_return > period.universe_return;
+                return `<tr><td>${escapeHtml(period.date)} → ${escapeHtml(period.end)}</td><td><span class="win-badge ${win ? "win" : "lose"}">${win ? "✓ 이김" : "✕ 짐"}</span></td><td class="${pctClass(period.pick_return)}">${pct(period.pick_return)}</td><td class="${pctClass(period.universe_return)}">${pct(period.universe_return)}</td><td class="${pctClass(period.pick_return - period.universe_return)}">${pp(period.pick_return - period.universe_return)}</td><td class="${pctClass(period.index_return)}">${pct(period.index_return)}</td><td style="text-align:left">${period.picks.map(pick => escapeHtml(pick.name)).join(", ")}</td></tr>`;
+            }).join("");
+            root.innerHTML = `<p class="code">${escapeHtml(data.finished_at || "")} 계산 · 표본 ${data.universe_size}개 종목 · ${summary.horizon}거래일마다 ${total}번 · 근거 상위 ${summary.top}개를 추천으로</p>
+                <div class="sim-verdict ${verdictClass}">${verdict}</div>
+                <div class="briefing-card"><h4>100만원으로 시작했다면 (${total}번 이어서 투자)</h4>
+                    <div class="stat-grid" style="margin:6px 0 0">
+                        ${bigStat("추천 종목", wonText(summary.pick_compound), pctClass(summary.pick_compound), `누적 ${pct(summary.pick_compound)} · 비용 ${(summary.cost_per_period * 100).toFixed(1)}%씩 차감`)}
+                        ${bigStat("표본 전체 평균", wonText(summary.universe_compound), pctClass(summary.universe_compound), `누적 ${pct(summary.universe_compound)}`)}
+                        ${bigStat(escapeHtml(data.index_name), wonText(summary.index_compound), pctClass(summary.index_compound), `누적 ${pct(summary.index_compound)}`)}
+                    </div></div>
+                <div class="stat-grid">
+                    ${bigStat("추천이 표본을 이긴 횟수", `${wins} / ${total}`, "", `이긴 비율 ${total ? Math.round(wins / total * 100) : 0}%`)}
+                    ${bigStat("기간당 평균 초과 수익", excessPoint, pctClass(excess), "추천 평균 − 표본 평균")}
+                    ${bigStat("위험 종목이 표본보다 못한 횟수", `${avoidWins} / ${total}`, "", "많을수록 위험 표시가 잘 맞음")}
+                    ${best ? bigStat("가장 잘 맞은 기간", pp(best.pick_return - best.universe_return), pctClass(best.pick_return - best.universe_return), `${escapeHtml(best.date)} 시작`) : ""}
+                    ${worst ? bigStat("가장 빗나간 기간", pp(worst.pick_return - worst.universe_return), pctClass(worst.pick_return - worst.universe_return), `${escapeHtml(worst.date)} 시작`) : ""}
+                </div>
+                <h4 style="margin:12px 0 4px">기간당 평균 수익률 비교</h4>
+                ${simBars([
+                    { label: `추천 (근거 상위 ${summary.top}개)`, value: summary.pick_mean, color: "#d33d4d" },
+                    { label: "표본 전체 평균", value: summary.universe_mean, color: "#98a2b3" },
+                    { label: escapeHtml(data.index_name), value: summary.index_mean, color: "#2672c8" },
+                    { label: `위험 (근거 하위 ${summary.top}개)`, value: summary.avoid_mean, color: "#f79009" },
+                ])}
+                <h4 style="margin:12px 0 4px">근거 점수 구간별 평균 수익률 <span class="code">위로 갈수록 높아야 점수가 앞날 수익과 맞는 것</span></h4>
+                ${simBars([
+                    { label: "점수 상위 1/3", value: buckets.high },
+                    { label: "점수 중간 1/3", value: buckets.middle },
+                    { label: "점수 하위 1/3", value: buckets.low },
+                ])}
+                <h4 style="margin:12px 0 4px">누적 수익률 흐름</h4>
+                ${simulationChart(periods, data.index_name)}
+                <h4 style="margin:12px 0 4px">기간별 결과 <span class="code">최근 순 · 이김 = 추천이 표본 평균보다 높음</span></h4>
+                <div class="table-wrap"><table class="sim-table"><thead><tr><th>기간</th><th>결과</th><th>추천</th><th>표본</th><th>차이(%p)</th><th>지수</th><th>추천 종목</th></tr></thead><tbody>${periodRows}</tbody></table></div>
+                <details style="margin-top:8px"><summary>계산 방법과 한계</summary><p class="analysis-meta" style="text-align:left;margin-top:8px">${escapeHtml(data.method_note)}</p>
+                <ul class="briefing-points" style="font-size:13px">${data.limits.map(limit => `<li>${escapeHtml(limit)}</li>`).join("")}</ul></details>`;
+        }
+        async function loadTrack() {
+            const root = document.getElementById("track-result");
+            if (!root) return;
+            try {
+                const data = await fetchJson(`/api/v1/recommendations/track?market=${document.getElementById("recommend-market").value}`);
+                if (!data.summary.length) { root.innerHTML = `<p class="analysis-meta" style="text-align:left">아직 하루 이상 지난 추천 기록이 없습니다. ${escapeHtml(data.note)}</p>`; return; }
+                const summary = data.summary.map(item => `<tr><td>${escapeHtml(item.label)}</td><td>${item.count}</td><td class="${pctClass(item.mean)}">${pct(item.mean)}</td><td>${Math.round(item.win_rate * 100)}%</td></tr>`).join("");
+                const rows = data.rows.slice(0, 40).map(row => `<tr><td>${escapeHtml(row.date)}</td><td style="text-align:left">${escapeHtml(row.name)} <span class="code">${escapeHtml(row.symbol)}</span></td><td style="text-align:left">${escapeHtml({ combined: "통합 추천", pick: "테마 추천", ai_pick: "AI 추천", risk: "위험", ai_risk: "AI 위험" }[row.kind] || row.kind)}</td><td class="${pctClass(row.return)}">${pct(row.return)}</td><td class="${pctClass(row.index_return)}">${pct(row.index_return)}</td></tr>`).join("");
+                root.innerHTML = `<p class="code">기록 ${data.snapshots}일치 · 같은 기간 ${escapeHtml(data.index_name)} 평균 ${pct(data.index_mean)}</p>
+                    <div class="table-wrap"><table class="sim-table"><thead><tr><th>구분</th><th>종목 수</th><th>평균 수익률</th><th>오른 비율</th></tr></thead><tbody>${summary}</tbody></table></div>
+                    <details style="margin-top:8px"><summary>종목별 기록</summary><div class="table-wrap"><table class="sim-table"><thead><tr><th>추천일</th><th>종목</th><th>구분</th><th>그 뒤 수익률</th><th>같은 기간 지수</th></tr></thead><tbody>${rows}</tbody></table></div></details>
+                    <p class="analysis-meta" style="text-align:left;margin-top:8px">${escapeHtml(data.note)}</p>`;
+            } catch (error) { root.innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`; }
+        }
+        document.getElementById("recommend-market").addEventListener("change", () => loadRecommendations());
+        document.getElementById("recommend-refresh").addEventListener("click", () => loadRecommendations(true));
+        document.getElementById("recommend-body").addEventListener("change", event => { if (["sim-horizon", "sim-top"].includes(event.target.id)) loadSimulation(false); });
+        document.getElementById("recommend-body").addEventListener("click", event => {
+            const simAction = event.target.closest("[data-sim-action]");
+            if (simAction) { loadSimulation(true); return; }
+            if (event.target.closest("summary")) return;
+            const stock = event.target.closest("[data-symbol]"), sector = event.target.closest("[data-sector]");
+            if (stock) showHistory(stock.dataset.symbol);
+            else if (sector) openSector(sector.dataset.sector, sector.dataset.market);
+        });
         async function loadBriefing(refresh = false) {
             const body = document.getElementById("briefing-body"), market = document.getElementById("briefing-market").value;
             const request = ++briefingRequest;
@@ -739,6 +1555,9 @@ MARKET_TREND_PAGE = """<!doctype html>
         function setView(view) {
             document.querySelectorAll("[data-view]").forEach(element => { element.hidden = element.dataset.view !== view; });
             document.querySelectorAll(".view-tab").forEach(tab => tab.classList.toggle("active", tab.dataset.viewTarget === view));
+            if (view === "recommend" && !recommendLoaded) loadRecommendations();
+            if (view === "account" && !accountLoaded) loadAccount();
+            if (view === "virtual") loadVirtual();  // 다른 탭에서 로그인했을 수 있어 열 때마다 확인
         }
         function showHistory(symbol) {
             document.getElementById("history-symbol").value = symbol;
@@ -755,6 +1574,8 @@ MARKET_TREND_PAGE = """<!doctype html>
             if (button) { document.getElementById("history-symbol").value = button.dataset.symbol; loadHistory(); }
         });
         document.addEventListener("click", event => {
+            const aiSummaryButton = event.target.closest(".ai-summary-button");
+            if (aiSummaryButton) { loadSummary(aiSummaryButton.closest("li"), false, true, true); return; }
             const summaryButton = event.target.closest(".summary-button");
             if (summaryButton) { loadSummary(summaryButton.closest("li"), true); return; }
             const filter = event.target.closest(".news-filter");

@@ -234,8 +234,12 @@ async def build_sector_report(
     market_country: str,
     days: int = 7,
     news_stock_count: int = 5,
+    use_ai: bool = True,
 ) -> dict[str, Any]:
-    """분야 한 곳의 기간별 등락률, 구성 종목, 분류된 기사와 논조 요약을 묶습니다."""
+    """분야 한 곳의 기간별 등락률, 구성 종목, 분류된 기사와 논조 요약을 묶습니다.
+
+    use_ai=False면 규칙 기반 분류만 해서 빨리 돌려줍니다(AI 분류는 나중에 덧입힘).
+    """
     sector_list = await get_sector_list(api)
     child_ids = [
         sector["sectorId"] for sector in sector_list if sector.get("parentSectorId") == sector_id
@@ -275,10 +279,7 @@ async def build_sector_report(
     articles = await collect_news(targets, days=days, per_target=15, max_articles=100)
     # 번역을 먼저 붙여야 일본어·독일어 등 기사도 번역 제목으로 분류할 수 있습니다.
     articles = await attach_korean_titles(articles)
-    articles, digest = await classify_and_digest(articles, name, days)
-
-    # 기사 조회 기간과 가장 가까운 공식 등락률 기간으로 논조-가격 방향을 비교합니다.
-    compare_duration = "1d" if days <= 1 else "1w" if days <= 10 else "1mo"
+    articles, digest = await classify_and_digest(articles, name, days, use_ai=use_ai)
     return {
         "sector_id": sector_id,
         "name": name,
@@ -292,11 +293,15 @@ async def build_sector_report(
         "top_stocks": top_stocks,
         "news_days": days,
         "news_digest": digest,
-        "tone_price_signal": tone_price_signal(
-            digest, rates.get(compare_duration), f"분야 {DURATION_LABELS[compare_duration]}"
-        ),
+        "tone_price_signal": sector_tone_signal(digest, rates, days),
         "articles": articles,
     }
+
+
+def sector_tone_signal(digest: dict[str, Any], rates: dict[str, Any], days: int) -> str | None:
+    # 기사 조회 기간과 가장 가까운 공식 등락률 기간으로 논조-가격 방향을 비교합니다.
+    compare_duration = "1d" if days <= 1 else "1w" if days <= 10 else "1mo"
+    return tone_price_signal(digest, rates.get(compare_duration), f"분야 {DURATION_LABELS[compare_duration]}")
 
 
 async def build_sector_range_trend(
