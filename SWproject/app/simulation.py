@@ -33,6 +33,85 @@ RESULT_TTL = 12 * 60 * 60
 CANDLE_CONCURRENCY = 2
 
 
+# --- 추천 규칙(실제 추천·가상 투자·시뮬레이션이 함께 씀) ------------------------------------------
+
+OVERHEAT_20D = 0.30  # 20일 +30% 넘게 오른 종목은 단기 과열로 보고 추천에서 뺍니다
+OVERHEAT_5D = 0.20  # 5일 +20% 넘게 오른 종목도 같습니다
+MIN_SCORE = 55  # 근거 점수가 이보다 낮으면 추천하지 않습니다(50이 중립)
+WEIGHT_CAP = 0.25  # 한 종목에 넣는 최대 비중(종목이 4개 미만이면 1/종목 수)
+WEAK_MARKET_FRACTION = 0.5  # 약세장(지수가 60일 평균선 아래)이면 단기(5거래일 이하) 보유는 이만큼만 투자
+SHORT_HOLD = 5
+
+
+def market_is_weak(index_closes: list[float]) -> bool | None:
+    """지수 종가(과거→최신)가 60일 평균선 아래면 약세장. 자료가 모자라면 None."""
+    closes = [value for value in index_closes if value]
+    if len(closes) < 60:
+        return None
+    return closes[-1] < sum(closes[-60:]) / 60
+
+
+def history_metrics(closes: list[float]) -> dict[str, float | None]:
+    """5·20일 수익률(소수)과 최근 20일 하루 변동의 표준편차(%)."""
+    def change(days: int) -> float | None:
+        return closes[-1] / closes[-1 - days] - 1 if len(closes) > days and closes[-1 - days] else None
+
+    daily = [(current / previous - 1) * 100 for previous, current in zip(closes[-21:-1], closes[-20:]) if previous]
+    volatility = statistics.pstdev(daily) if len(daily) >= 10 else None
+    return {"r5": change(5), "r20": change(20), "volatility": volatility}
+
+
+def is_overheated(r5: float | None, r20: float | None) -> bool:
+    return (r20 is not None and r20 > OVERHEAT_20D) or (r5 is not None and r5 > OVERHEAT_5D)
+
+
+def passes_rules(score: float | None, r5: float | None, r20: float | None, min_score: float = MIN_SCORE) -> bool:
+    return score is not None and score >= min_score and not is_overheated(r5, r20)
+
+
+def position_weights(volatilities: list[float | None], sizing: str = "equal", cap: float = WEIGHT_CAP) -> list[float]:
+    """종목별 투자 비중(합 1). equal = 같은 금액, inverse_vol = 변동성이 작을수록 많이(한 종목 최대 cap)."""
+    count = len(volatilities)
+    if not count:
+        return []
+    if sizing != "inverse_vol":
+        return [1 / count] * count
+    limit = max(cap, 1 / count)
+    known = [value for value in volatilities if value]
+    fallback = statistics.fmean(known) if known else 1.0
+    raw = [1 / (value or fallback) for value in volatilities]
+    weights = [value / sum(raw) for value in raw]
+    for _ in range(count):  # 상한을 넘는 비중은 잘라 나머지 종목에 나눠 줍니다
+        over = [index for index, weight in enumerate(weights) if weight > limit + 1e-9]
+        if not over:
+            break
+        spare = sum(weights[index] - limit for index in over)
+        for index in over:
+            weights[index] = limit
+        room = [index for index, weight in enumerate(weights) if weight < limit - 1e-9]
+        room_total = sum(weights[index] for index in room)
+        for index in room:
+            weights[index] += spare * weights[index] / room_total if room_total else spare / len(room)
+    return weights
+
+
+def exit_path_return(entry: float, closes: list[float], stop: float | None = None, trail: float | None = None,
+                     arm: float = 0.05) -> tuple[float, int | None, str | None]:
+    """보유 기간 동안의 종가(closes)를 하루씩 보며 매도 신호가 나오면 그날 종가에 팝니다.
+
+    stop: 산 가격 대비 이만큼(소수) 떨어지면 손절. trail: 산 뒤 최고 종가가 산 가격보다 arm 이상 오른 다음,
+    최고 종가 대비 이만큼 떨어지면 판매(이익 지키기). 돌려주는 값: (수익률, 판 날 위치 또는 None, 이유).
+    """
+    peak = entry
+    for index, close in enumerate(closes):
+        peak = max(peak, close)
+        if stop is not None and close / entry - 1 <= -stop:
+            return close / entry - 1, index, "stop"
+        if trail is not None and peak >= entry * (1 + arm) and close / peak - 1 <= -trail:
+            return close / entry - 1, index, "trail"
+    return (closes[-1] / entry - 1 if closes else 0.0), None, None
+
+
 # --- 순수 계산(테스트 가능) -----------------------------------------------------------------
 
 def _mean(values: list[float]) -> float | None:
@@ -40,10 +119,16 @@ def _mean(values: list[float]) -> float | None:
 
 
 def run_backtest(series: dict[str, list[dict[str, Any]]], names: dict[str, str], horizon: int = 20, top: int = 5,
-                 step: int | None = None, benchmark: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+                 step: int | None = None, benchmark: list[dict[str, Any]] | None = None,
+                 filtered: bool = False, sizing: str = "equal", exits: dict[str, float] | None = None,
+                 regime: bool = False) -> dict[str, Any]:
     """series: {symbol: 일봉(과거→최신, date·close·volume)}. 리밸런스마다 근거 점수 상위 top개를 추천, 하위 top개를 위험으로.
 
-    수익률은 소수(0.05 = 5%)로 계산합니다.
+    filtered=True면 단기 과열(20일 +30%·5일 +20% 초과)·근거 점수 MIN_SCORE 미만 종목을 추천에서 빼고(모자라면 그만큼 현금),
+    sizing="inverse_vol"이면 변동성이 작은 종목에 더 많이(한 종목 최대 WEIGHT_CAP) 넣습니다.
+    exits={"stop": 0.08, "trail": 0.10}이면 보유 중 매도 신호(손절·고점 대비 하락)가 나온 날 종가에 팔고 나머지 기간은 현금.
+    regime=True면 그날 지수가 60일 평균선 아래(약세장)일 때 WEAK_MARKET_FRACTION만 투자하고 나머지는 현금.
+    표본 평균·위험 종목 수익률은 비교 기준이라 매도 신호를 적용하지 않습니다. 수익률은 소수(0.05 = 5%)입니다.
     """
     step = step or horizon
     calendar = sorted({candle["date"] for candles in series.values() for candle in candles})
@@ -54,6 +139,7 @@ def run_backtest(series: dict[str, list[dict[str, Any]]], names: dict[str, str],
     }
     ordered = {symbol: [candle for candle in candles if candle.get("close")] for symbol, candles in series.items()}
     bench = {candle["date"]: candle["close"] for candle in (benchmark or []) if candle.get("close")}
+    bench_days = sorted(bench)
 
     periods = []
     buckets: dict[str, list[float]] = {"high": [], "middle": [], "low": []}
@@ -68,16 +154,28 @@ def run_backtest(series: dict[str, list[dict[str, Any]]], names: dict[str, str],
             if score is None:
                 continue
             forward = by_symbol[symbol][end]["close"] / history[-1]["close"] - 1
-            rows.append({"symbol": symbol, "name": names.get(symbol, symbol), "score": score, "return": forward})
+            metrics = history_metrics([candle["close"] for candle in history[-61:]])
+            row = {"symbol": symbol, "name": names.get(symbol, symbol), "score": score, "return": forward, "exit": None, **metrics}
+            if exits:
+                path_closes = [candle["close"] for candle in candles if day < candle["date"] <= end]
+                row["held_return"], _, row["exit"] = exit_path_return(history[-1]["close"], path_closes, exits.get("stop"), exits.get("trail"))
+            rows.append(row)
         if len(rows) < top * 3:
             continue
         rows.sort(key=lambda row: (-row["score"], row["symbol"]))  # 점수만으로 줄 세움(앞날 수익률은 보지 않음)
-        picks, avoid = rows[:top], rows[-top:]
+        eligible = [row for row in rows if passes_rules(row["score"], row["r5"], row["r20"])] if filtered else rows
+        picks, avoid = eligible[:top], rows[-top:]
         third = len(rows) // 3
         buckets["high"].extend(row["return"] for row in rows[:third])
         buckets["middle"].extend(row["return"] for row in rows[third:-third])
         buckets["low"].extend(row["return"] for row in rows[-third:])
-        pick_return = statistics.fmean(row["return"] for row in picks) - COST
+        # 거르고 남은 종목이 top개보다 적으면 빈자리는 현금(수익 0)으로 둡니다.
+        weights = [weight * len(picks) / top for weight in position_weights([row["volatility"] for row in picks], sizing)]
+        weak = bool(regime and market_is_weak([bench[known] for known in bench_days if known <= day][-60:]))
+        if weak:
+            weights = [weight * WEAK_MARKET_FRACTION for weight in weights]
+        invested = sum(weights)
+        pick_return = sum(weight * row.get("held_return", row["return"]) for weight, row in zip(weights, picks)) - COST * invested
         universe_return = statistics.fmean(row["return"] for row in rows)
         avoid_return = statistics.fmean(row["return"] for row in avoid)
         index_return = bench[end] / bench[day] - 1 if day in bench and end in bench and bench[day] else None
@@ -85,7 +183,10 @@ def run_backtest(series: dict[str, list[dict[str, Any]]], names: dict[str, str],
             "date": day, "end": end, "count": len(rows),
             "pick_return": round(pick_return, 4), "universe_return": round(universe_return, 4),
             "avoid_return": round(avoid_return, 4), "index_return": round(index_return, 4) if index_return is not None else None,
-            "picks": [{key: row[key] for key in ("symbol", "name", "score")} | {"return": round(row["return"], 4)} for row in picks],
+            "invested": round(invested, 3), "weak_market": weak,
+            "early_exits": sum(1 for row in picks if row.get("exit")),
+            "picks": [{key: row[key] for key in ("symbol", "name", "score")} | {"return": round(row["return"], 4), "weight": round(weight, 3)}
+                      for weight, row in zip(weights, picks)],
             "avoid": [{key: row[key] for key in ("symbol", "name", "score")} | {"return": round(row["return"], 4)} for row in avoid],
         })
 
@@ -99,6 +200,20 @@ def run_backtest(series: dict[str, list[dict[str, Any]]], names: dict[str, str],
         return round(total - 1, 4)
 
     excess = [period["pick_return"] - period["universe_return"] for period in periods]
+
+    def drawdown(key: str) -> float | None:
+        """누적 곡선의 최고점 대비 최대 하락(소수)."""
+        values = [period[key] for period in periods if period[key] is not None]
+        if not values:
+            return None
+        level, peak, worst = 1.0, 1.0, 0.0
+        for value in values:
+            level *= 1 + value
+            peak = max(peak, level)
+            worst = min(worst, level / peak - 1)
+        return round(worst, 4)
+
+    pick_returns = [period["pick_return"] for period in periods]
     return {
         "periods": periods,
         "summary": {
@@ -117,6 +232,18 @@ def run_backtest(series: dict[str, list[dict[str, Any]]], names: dict[str, str],
             "index_compound": compound("index_return"),
             "score_buckets": {name: _mean(values) for name, values in buckets.items()},
             "cost_per_period": COST,
+            "pick_max_drawdown": drawdown("pick_return"),
+            "universe_max_drawdown": drawdown("universe_return"),
+            "index_max_drawdown": drawdown("index_return"),
+            "pick_volatility": round(statistics.pstdev(pick_returns), 4) if len(pick_returns) > 1 else None,
+            "worst_period": round(min(pick_returns), 4) if pick_returns else None,
+            "average_invested": _mean([period["invested"] for period in periods]),
+            "filtered": filtered,
+            "sizing": sizing,
+            "exits": exits,
+            "early_exit_count": sum(period.get("early_exits", 0) for period in periods),
+            "regime": regime,
+            "weak_periods": sum(1 for period in periods if period["weak_market"]),
         },
     }
 
@@ -161,8 +288,21 @@ async def _candles(api: TossApiClient, symbol: str) -> list[dict[str, Any]]:
     return slim
 
 
+# 화면의 "규칙 비교" 표: (이름, 급등 거르기, 비중, 매도 신호, 약세장 절반 투자)
+VARIANTS = [
+    ("예전 방식(같은 금액)", False, "equal", None, False),
+    ("급등 종목 거르기만", True, "equal", None, False),
+    ("비중 조절만", False, "inverse_vol", None, False),
+    ("거르기 + 비중 조절", True, "inverse_vol", None, False),
+    ("비중 조절 + 약세장 절반 투자", False, "inverse_vol", None, True),
+    ("거르기 + 비중 조절 + 약세장 절반 투자", True, "inverse_vol", None, True),
+    ("비중 조절 + 매도 신호(고점 대비 −10%)", False, "inverse_vol", {"trail": 0.10}, False),
+    ("거르기 + 비중 조절 + 매도 신호", True, "inverse_vol", {"trail": 0.10}, False),
+]
+
+
 def _job_key(market: str, horizon: int, top: int) -> str:
-    return f"sim:result:v1:{market}:{horizon}:{top}:{date.today().isoformat()}"
+    return f"sim:result:v3:{market}:{horizon}:{top}:{date.today().isoformat()}"
 
 
 async def get_simulation(market: str, horizon: int, top: int) -> dict[str, Any] | None:
@@ -202,13 +342,25 @@ async def run_simulation(api: TossApiClient, market: str, horizon: int, top: int
         except Exception:
             benchmark = []
         await set_json(key, {**state, "progress": "시뮬레이션 계산 중"}, RESULT_TTL)
-        result = await asyncio.to_thread(run_backtest, series, names, horizon, top, None, benchmark)
+        # 지금 추천 규칙(11-17): 비중 조절은 항상, 급등 종목 거르기·약세장 절반 투자는 5거래일 이하 보유일 때만.
+        filtered = horizon <= SHORT_HOLD
+        result = await asyncio.to_thread(run_backtest, series, names, horizon, top, None, benchmark, filtered, "inverse_vol", None, filtered)
+        variants = []
+        for label, variant_filtered, sizing, exits, regime in VARIANTS:
+            summary = (await asyncio.to_thread(run_backtest, series, names, horizon, top, None, benchmark,
+                                               variant_filtered, sizing, exits, regime))["summary"]
+            variants.append({"label": label,
+                             "current": variant_filtered == filtered and sizing == "inverse_vol" and not exits and regime == filtered,
+                             **{key: summary[key] for key in ("pick_mean", "pick_compound", "hit_rate", "excess_mean",
+                                                             "pick_max_drawdown", "worst_period", "early_exit_count")}})
         await set_json(key, {
             **state, "status": "done", "progress": "완료", "finished_at": datetime.now(KST).strftime("%Y-%m-%d %H:%M"),
-            "universe_size": len(series), "index_name": index_name, **result,
+            "universe_size": len(series), "index_name": index_name, **result, "variants": variants,
             "method_note": (
                 f"표본: 분야(대분류)마다 시가총액 상위 {PER_SECTOR}개를 모은 {len(series)}개 종목. 리밸런스 날짜마다 그날까지의 일봉만으로 "
                 f"근거 점수(이동평균 배열·52주 위치·20일 모멘텀·RSI·거래량·변동성·낙폭)를 매겨 상위 {top}개를 추천, 하위 {top}개를 위험으로 고르고 "
+                f"(지금 규칙: 변동성이 작은 종목에 더 많이·한 종목 최대 25%"
+                f"{', 단기 과열·근거 약한 종목 제외, 지수가 60일 평균선 아래인 약세장에는 절반만 투자' if horizon <= SHORT_HOLD else ''}) "
                 f"{horizon}거래일 뒤 수익률을 표본 평균·{index_name}와 비교했습니다. 추천 쪽에는 리밸런스마다 거래 비용 {COST * 100:.1f}%를 뺐습니다."
             ),
             "limits": [
@@ -302,5 +454,5 @@ async def track_recommendations(api: TossApiClient, market: str, max_snapshots: 
         "market": market.upper(), "snapshots": len(history), "index_name": index_name,
         "index_mean": _mean(index_values), "summary": summary,
         "rows": sorted(rows, key=lambda row: (row["date"], row["kind"]), reverse=True)[:200],
-        "note": "AI분석 탭이 추천을 새로 계산한 날마다 추천·위험 종목과 그때 가격을 남기고, 지금 가격과 비교합니다. 기록이 쌓일수록 믿을 만해집니다.",
+        "note": "서버가 평일 장 마감 뒤 하루 한 번(국장 15:55, 미장 다음 날 06:45 이후) 추천을 새로 만들어 추천·위험 종목과 종가를 남기고(AI분석 탭에서 새로 계산한 날은 그 결과로 덮어씀), 지금 가격과 비교합니다. 기록이 쌓일수록 믿을 만해집니다.",
     }

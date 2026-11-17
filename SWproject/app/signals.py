@@ -5,6 +5,9 @@
 
 근거(가중치): 이동평균 배열(2) · 52주 위치(1) · 20일 모멘텀(1.5) · RSI 과열/과매도(1) · 거래량 동반 여부(1)
 · 변동성(1) · 60일 낙폭(1) · 외국인·기관 수급(국내, 1.5) · 매수 유의사항(2) · 기사 논조(1)
+
+11-17 근거별 검증(국장·미장 약 1년, 앞·뒤 절반): "거래량 동반 상승"은 이후 수익이 표본 평균보다 오히려 낮아(국장 두 절반 모두)
+점수에서는 중립(0)으로 두고 화면에는 참고로만 보여 줍니다. "거래량 동반 하락"은 그대로 부정 근거입니다.
 """
 import asyncio
 import logging
@@ -102,11 +105,12 @@ def technical_factors(candles: list[dict[str, Any]]) -> list[dict[str, Any]]:
         recent, base = _average(volumes[-5:]), _average(volumes[-25:-5])
         ratio = recent / base if base else None
         five_day = (close / closes[-6] - 1) * 100 if closes[-6] else 0.0
-        if ratio and ratio >= 1.5:
-            signal = 1 if five_day > 0 else -1
-            label = "거래량 동반 상승" if signal > 0 else "거래량 동반 하락"
-            factors.append(_factor("volume", label, f"최근 5일 거래량이 평소의 {ratio:.1f}배, 5일 {five_day:+.1f}%", signal,
-                                   "거래가 몰리며 움직인 방향이라 신호가 강합니다."))
+        if ratio and ratio >= 1.5 and five_day > 0:
+            factors.append(_factor("volume", "거래량 동반 상승", f"최근 5일 거래량이 평소의 {ratio:.1f}배, 5일 {five_day:+.1f}%", 0,
+                                   "거래가 몰리며 올랐지만, 과거 검증에서 이후 수익이 평균보다 낮아 점수에는 넣지 않습니다(참고)."))
+        elif ratio and ratio >= 1.5:
+            factors.append(_factor("volume", "거래량 동반 하락", f"최근 5일 거래량이 평소의 {ratio:.1f}배, 5일 {five_day:+.1f}%", -1,
+                                   "거래가 몰리며 내린 방향이라 신호가 강합니다."))
         elif ratio:
             factors.append(_factor("volume", "거래량 평소 수준", f"평소의 {ratio:.1f}배", 0, "거래량에 뚜렷한 변화가 없습니다."))
 

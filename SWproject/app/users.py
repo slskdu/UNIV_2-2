@@ -173,7 +173,7 @@ async def logout(token: str | None) -> None:
 
 
 async def delete_user(username: str) -> None:
-    await redis.delete(_user_key(username), f"account:watchlist:v2:{username}", f"account:stock-status:v2:{username}", f"vp:v1:{username}")
+    await redis.delete(_user_key(username), f"account:watchlist:v2:{username}", f"account:stock-status:v3:{username}", f"vp:v1:{username}")
     await drop_client(username)
 
 

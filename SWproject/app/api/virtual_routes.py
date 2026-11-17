@@ -1,4 +1,5 @@
 """가상 투자 API: 과거로 가상 투자해 보기, 오늘부터 추천대로 가상 투자(로그인 사용자별 저장)."""
+import logging
 import uuid
 from datetime import date, datetime
 from typing import Literal
@@ -7,9 +8,10 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from pydantic import BaseModel, Field
 
 from ..account import usd_krw_rate
-from ..briefing import KST
+from ..briefing import KST, MARKET_GAUGES
 from ..rate_limit import enforce
 from ..redis_client import get_json, set_json
+from ..simulation import _candles, market_is_weak
 from ..toss_api import TossApiError
 from ..virtual import (
     NAME_MAX,
@@ -23,6 +25,8 @@ from ..virtual import (
     virtual_backtest,
 )
 from .account_routes import check_request, current_user, require_write_header
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/virtual", tags=["virtual"])
 checked = [Depends(check_request)]
@@ -43,12 +47,14 @@ class BacktestInput(BaseModel):
     horizon: Literal[5, 20] = 20
     top: int = Field(5, ge=3, le=10)
     months: Literal[3, 6, 12] = 12
+    follow_signals: bool = True  # 매도 신호(고점 대비 −10%)가 나면 그날 판 것으로
 
 
 @router.post("/backtest", dependencies=checked_write)
 async def backtest(request: Request, payload: BacktestInput):
     """정한 금액으로 과거에 추천 규칙대로 투자했다면(근거 점수 상위 N개, N거래일마다 교체). 미국 주식은 지금 환율로 달러로 바꿔 계산."""
-    key = f"vp:backtest:v1:{payload.market}:{round(payload.capital_krw)}:{payload.horizon}:{payload.top}:{payload.months}:{date.today().isoformat()}"
+    key = (f"vp:backtest:v3:{payload.market}:{round(payload.capital_krw)}:{payload.horizon}:{payload.top}:{payload.months}:"
+           f"{int(payload.follow_signals)}:{date.today().isoformat()}")
     cached = await get_json(key)
     if cached is not None:
         return cached
@@ -63,7 +69,7 @@ async def backtest(request: Request, payload: BacktestInput):
         fx = rate["mid"]
         capital = payload.capital_krw / fx
     try:
-        result = await virtual_backtest(api, payload.market, capital, payload.horizon, payload.top, payload.months)
+        result = await virtual_backtest(api, payload.market, capital, payload.horizon, payload.top, payload.months, payload.follow_signals)
     except TossApiError as error:
         raise HTTPException(status_code=502, detail="토스 API 호출에 실패했습니다.") from error
     result = {**result, "capital_krw": round(payload.capital_krw), "fx": fx}
@@ -90,6 +96,7 @@ class PortfolioInput(BaseModel):
     end_date: date | None = None
     # 비워 두면 "국장 통합 추천 11-15"처럼 자동으로 붙이고, 같은 이름이 있으면 (2)…를 붙입니다.
     name: str | None = Field(None, max_length=NAME_MAX)
+    auto_sell: bool = True  # 매도 신호(고점 대비 −10%)가 나면 그날 종가에 판 것으로 처리
 
 
 @router.post("/portfolios", dependencies=checked_write)
@@ -118,6 +125,13 @@ async def new_portfolio(request: Request, payload: PortfolioInput, user: dict = 
     if payload.market == "us":
         rate = await usd_krw_rate(request.app.state.toss_api)
         fx = rate["mid"] if rate else None
+    weak_market = None
+    try:
+        # 약세장 여부(대표 지수가 60일 평균선 아래). 단기 보유 포트폴리오만 이 값으로 투자 비중을 줄입니다.
+        index_symbol = MARKET_GAUGES[payload.market.upper()][0][0]
+        weak_market = market_is_weak([candle["close"] for candle in await _candles(request.app.state.toss_api, index_symbol)])
+    except Exception:
+        logger.exception("weak market check failed")
     sources = ["all", "ai", "theme"] if payload.source == "compare" else [payload.source]
     created, group = [], uuid.uuid4().hex[:8] if payload.source == "compare" else None
     for source in sources:
@@ -125,7 +139,7 @@ async def new_portfolio(request: Request, payload: PortfolioInput, user: dict = 
             # 세 가지 비교는 이름 뒤에 방식을 붙여 구분합니다.
             name = f"{payload.name} · {SOURCE_LABELS[source]}" if payload.name and len(sources) > 1 else payload.name
             created.append(await create_portfolio(user["username"], payload.market, payload.capital_krw, source, end_date,
-                                                  recommendations, fx, group, name))
+                                                  recommendations, fx, group, name, payload.auto_sell, weak_market))
         except ValueError as error:
             if len(sources) == 1:
                 raise HTTPException(status_code=409, detail=str(error)) from error

@@ -2,7 +2,7 @@ import asyncio
 import hashlib
 import logging
 from collections.abc import Awaitable, Callable
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any, Literal
 
 from fastapi import APIRouter, Header, HTTPException, Path, Query, Request
@@ -21,12 +21,14 @@ from ..news_classifier import classify_and_digest, tone_price_signal
 from ..rate_limit import enforce
 from ..recommendations import build_recommendations, with_combined
 from ..simulation import get_simulation, record_recommendations, run_simulation, track_recommendations
-from ..redis_client import cached_json, get_json, set_json
+from ..briefing import KST
+from ..redis_client import cached_json, get_json, redis, set_json
 from ..sector_news import collect_news, stock_targets
 from ..sectors import build_sector_range_trend, build_sector_report, english_name_for, get_sector_flow, sector_tone_signal
 from ..stock_master import search_stocks
 from ..toss_api import TossApiClient, TossApiError
 from ..translator import attach_korean_titles
+from ..virtual import session_close
 
 router = APIRouter(prefix="/api/v1", tags=["insight"])
 logger = logging.getLogger(__name__)
@@ -456,16 +458,63 @@ async def recommendations(
                 return with_combined(cached)
         await enforce(request, "analysis")
         try:
-            result = await build_recommendations(_api(request), market)
+            return await _compute_recommendations(_api(request), market)
         except TossApiError as error:
             raise _toss_error(error) from error
-        settled = result["method"] == "ai" or not ai_enabled()
-        await set_json(key, result, RECOMMENDATION_TTL if settled else RECOMMENDATION_RETRY_TTL)
-        try:
-            await record_recommendations(market, result)  # 성과 추적용 기록(하루 한 번, 같은 날은 덮어씀)
-        except Exception:
-            logger.exception("recommendation record failed")
-        return result
+
+
+async def _compute_recommendations(api: TossApiClient, market: str) -> dict[str, Any]:
+    """추천을 새로 만들어 캐시하고 성과 추적용으로 기록합니다(같은 날 다시 만들면 그날 기록을 덮어씀)."""
+    result = await build_recommendations(api, market)
+    settled = result["method"] == "ai" or not ai_enabled()
+    await set_json(f"insight:recommendations:v4:{market}", result, RECOMMENDATION_TTL if settled else RECOMMENDATION_RETRY_TTL)
+    try:
+        await record_recommendations(market, result)
+    except Exception:
+        logger.exception("recommendation record failed")
+    return result
+
+
+# --- 추천 매일 자동 기록 ------------------------------------------------------------------------
+# 화면에서 AI분석을 누른 날만 기록되면 성과 추적 표본이 들쭉날쭉해, 장이 끝난 뒤 하루 한 번 서버가 직접 만들어 남깁니다.
+# 기록 가격은 그날 종가. 장 마감 15분 뒤부터 6시간 안에만 시도하고(서버를 늦게 켠 날은 건너뜀), Redis 표시로 하루 한 번만.
+AUTO_RECORD_DELAY = timedelta(minutes=15)
+AUTO_RECORD_WINDOW = timedelta(hours=6)
+AUTO_RECORD_CHECK_SECONDS = 10 * 60
+
+
+def due_record_session(market: str, now: datetime) -> str | None:
+    """지금 자동 기록할 장(그 시장의 거래일, YYYY-MM-DD). 없으면 None. 주말은 건너뛰고 공휴일은 따지지 않습니다."""
+    for offset in (0, 1):
+        day = now.date() - timedelta(days=offset)
+        if day.weekday() >= 5:
+            continue
+        ready = session_close(market, day.isoformat()) + AUTO_RECORD_DELAY
+        if ready <= now < ready + AUTO_RECORD_WINDOW:
+            return day.isoformat()
+    return None
+
+
+async def daily_record_loop(api: TossApiClient) -> None:
+    while True:
+        now = datetime.now(KST)
+        for market in ("kr", "us"):
+            session = due_record_session(market, now)
+            if not session:
+                continue
+            # 이미 기록했거나 다른 프로세스가 기록 중이면 건너뜀(실패하면 표시를 지워 다음 확인 때 다시)
+            flag = f"insight:auto-record:{market}:{session}"
+            if not await redis.set(flag, "running", nx=True, ex=2 * 24 * 3600):
+                continue
+            try:
+                async with _recommendation_locks[market]:
+                    result = await _compute_recommendations(api, market)
+                await redis.set(flag, result.get("generated_at") or "done", ex=2 * 24 * 3600)
+                logger.info("daily recommendation recorded: %s %s", market, session)
+            except Exception:
+                await redis.delete(flag)
+                logger.exception("daily recommendation record failed: %s", market)
+        await asyncio.sleep(AUTO_RECORD_CHECK_SECONDS)
 
 
 # --- 추천 성과 검증 -------------------------------------------------------------------------

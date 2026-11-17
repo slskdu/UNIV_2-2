@@ -489,7 +489,7 @@ async def remove_watch(username: str, symbol: str) -> list[dict[str, Any]]:
     return items
 
 
-STATUS_KEY = "account:stock-status:v2:{username}"
+STATUS_KEY = "account:stock-status:v3:{username}"
 
 
 def status_lines(snapshot: dict[str, Any], holding: dict[str, Any] | None, news: dict[str, Any] | None) -> list[dict[str, str]]:
@@ -559,10 +559,19 @@ async def stock_status(api: TossApiClient, client: AccountClient | None, usernam
             return {**entry, "lines": [{"tone": "info", "text": "주가 자료를 불러오지 못했습니다."}]}
         news_cache = await get_json(f"insight:stock-news:v10:{entry['symbol']}:7")
         news = news_cache.get("news_digest") if news_cache and news_cache.get("found") else None
+        holding = held.get(entry["symbol"])
+        exit_signal = None
+        if holding and holding.get("average_price"):
+            # 실제 계좌는 산 날을 몰라 평균가와 최근 60일 최고 종가로 봅니다(app/exit_signals.py).
+            from .exit_signals import exit_signals
+            from .signals import compute_signals
+
+            evidence = compute_signals(snapshot["_candles"], snapshot["warnings"])
+            exit_signal = exit_signals(snapshot["_candles"], holding["average_price"], None, evidence["score"])
         return {
             **entry, "close": snapshot["close"], "currency": snapshot["currency"], "day_change": snapshot.get("day_change"),
-            "rates": snapshot["rates"], "lines": status_lines(snapshot, held.get(entry["symbol"]), news),
-            "news_loaded": bool(news),
+            "rates": snapshot["rates"], "lines": status_lines(snapshot, holding, news),
+            "news_loaded": bool(news), "exit_signal": exit_signal,
         }
 
     result = {

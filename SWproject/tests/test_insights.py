@@ -929,7 +929,29 @@ class SignalsTest(unittest.TestCase):
         closes = [100.0] * 55 + [100 + index * 2 for index in range(1, 6)]
         volumes = [1000.0] * 55 + [3000.0] * 5
         volume = next(factor for factor in technical_factors(_candles(closes, volumes=volumes)) if factor["key"] == "volume")
-        self.assertEqual(volume["signal"], 1)
+        self.assertEqual(volume["label"], "거래량 동반 상승")
+        self.assertEqual(volume["signal"], 0)  # 11-17 검증: 이후 수익이 평균보다 낮아 점수에는 넣지 않음
+        falling = [100.0] * 55 + [100 - index * 2 for index in range(1, 6)]
+        volume = next(factor for factor in technical_factors(_candles(falling, volumes=volumes)) if factor["key"] == "volume")
+        self.assertEqual(volume["signal"], -1)
+
+    def test_market_is_weak(self):
+        from app.simulation import market_is_weak
+
+        self.assertIsNone(market_is_weak([100.0] * 30))
+        self.assertTrue(market_is_weak([100.0] * 59 + [90.0]))
+        self.assertFalse(market_is_weak([100.0] * 59 + [110.0]))
+
+    def test_weak_market_halves_short_backtest(self):
+        from app.simulation import MIN_HISTORY, run_backtest
+
+        length = MIN_HISTORY + 45
+        series = {f"UP{n}": _candles([100 + index * (0.3 + n * 0.05) for index in range(length)]) for n in range(16)}
+        falling_index = _candles([1000 - index for index in range(length)])
+        normal = run_backtest(series, {}, 5, 5, None, falling_index, True, "inverse_vol")
+        halved = run_backtest(series, {}, 5, 5, None, falling_index, True, "inverse_vol", None, True)
+        self.assertTrue(all(period["weak_market"] for period in halved["periods"]))
+        self.assertAlmostEqual(halved["summary"]["average_invested"], normal["summary"]["average_invested"] / 2, places=3)
 
 
 class BacktestTest(unittest.TestCase):
@@ -1167,3 +1189,167 @@ class PortfolioSessionTest(unittest.TestCase):
         evening = evaluate(self._portfolio("KR"), prices, [], "2026-11-16", now=datetime(2026, 11, 16, 20, 0, tzinfo=KST))
         self.assertEqual(evening["status"], "active")
         self.assertFalse(evening["live"])  # 월요일 저녁: 월요일 종가로 확정, 장중 아님
+
+
+def dated(closes, volumes=None, start=date(2026, 9, 1)):
+    return [{"date": (start + timedelta(days=index)).isoformat(), "open": close, "close": close,
+             "volume": (volumes[index] if volumes else 1000)} for index, close in enumerate(closes)]
+
+
+class ExitSignalTest(unittest.TestCase):
+    def test_trail_from_peak_is_sell(self):
+        from app.exit_signals import exit_signals
+
+        result = exit_signals(dated([100, 110, 120, 105]), 100, "2026-09-01")
+        self.assertEqual(result["level"], "sell")  # 최고 120에서 −12.5%
+        self.assertEqual(result["signals"][0]["key"], "trail")
+
+    def test_loss_and_weak_evidence_are_watch_only(self):
+        from app.exit_signals import exit_signals
+
+        loss = exit_signals(dated([100, 98, 88]), 100, "2026-09-01")
+        self.assertEqual(loss["level"], "watch")  # 손절은 시뮬레이션에서 손해라 주의만
+        self.assertEqual([signal["key"] for signal in loss["signals"]], ["loss"])
+        weak = exit_signals(dated([100, 101, 102]), 100, "2026-09-01", evidence_score=40)
+        self.assertEqual([signal["key"] for signal in weak["signals"]], ["evidence"])
+
+    def test_small_gain_without_arm_is_hold(self):
+        from app.exit_signals import exit_signals
+
+        result = exit_signals(dated([100, 103, 101]), 100, "2026-09-01")
+        self.assertEqual(result["level"], "hold")  # +5%를 넘은 적이 없으면 고점 대비 신호를 보지 않음
+        self.assertEqual(exit_signals([], 100)["level"], "hold")
+
+    def test_trend_break_with_volume(self):
+        from app.exit_signals import exit_signals
+
+        closes = [100 + index * 0.1 for index in range(25)] + [99]
+        volumes = [1000] * 25 + [2000]
+        result = exit_signals(dated(closes, volumes), 99, "2026-09-25")
+        self.assertIn("trend", [signal["key"] for signal in result["signals"]])
+
+
+class RecommendRuleTest(unittest.TestCase):
+    def test_passes_rules(self):
+        from app.simulation import passes_rules
+
+        self.assertTrue(passes_rules(60, 0.05, 0.10))
+        self.assertFalse(passes_rules(50, 0.05, 0.10))  # 근거 약함
+        self.assertFalse(passes_rules(70, 0.25, 0.10))  # 5일 +20% 초과
+        self.assertFalse(passes_rules(70, 0.05, 0.35))  # 20일 +30% 초과
+        self.assertTrue(passes_rules(70, None, None))
+
+    def test_inverse_vol_weights_capped(self):
+        from app.simulation import position_weights
+
+        weights = position_weights([1, 2, 2, 4, 4], "inverse_vol")
+        self.assertAlmostEqual(sum(weights), 1)
+        self.assertLessEqual(max(weights), 0.25 + 1e-9)
+        self.assertGreater(weights[1], weights[3])  # 변동성이 작으면 더 많이
+        self.assertEqual(position_weights([1, 2], "equal"), [0.5, 0.5])
+        self.assertAlmostEqual(sum(position_weights([None, 2, 3], "inverse_vol")), 1)  # 모르는 값은 평균으로
+
+    def test_exit_path_return(self):
+        from app.simulation import exit_path_return
+
+        ret, index, reason = exit_path_return(100, [110, 120, 107, 130], trail=0.10)
+        self.assertEqual((index, reason), (2, "trail"))
+        self.assertAlmostEqual(ret, 0.07)
+        self.assertEqual(exit_path_return(100, [97, 92, 89], stop=0.10)[1:], (2, "stop"))
+        ret, index, reason = exit_path_return(100, [102, 93, 95], trail=0.05)
+        self.assertIsNone(index)  # +5%를 넘은 적이 없어 고점 대비 매도 안 함
+        self.assertAlmostEqual(ret, -0.05)
+
+    def test_portfolio_follow_signals_records_exits(self):
+        from app.simulation import MIN_HISTORY
+        from app.virtual import run_portfolio
+
+        length = MIN_HISTORY + 45
+        bumpy = [100 + index * 0.5 for index in range(MIN_HISTORY)] + [130, 140, 150, 120, 118] * 9
+        series = {f"UP{n}": _candles([100 + index * (0.3 + n * 0.05) for index in range(length)]) for n in range(3)}
+        series["BUMP"] = _candles(bumpy[:length])
+        result = run_portfolio(series, {}, 1_000_000, horizon=20, top=4, trail=0.10)
+        self.assertEqual(result["rules"]["trail"], 0.10)
+        trades = [trade for period in result["periods"] for trade in period["trades"]]
+        self.assertTrue(all("weight" in trade for trade in trades))
+        self.assertEqual(result["early_exits"], sum(1 for trade in trades if trade["exit"]))
+
+
+class PortfolioRuleTest(unittest.IsolatedAsyncioTestCase):
+    def test_auto_sell_locks_value_after_signal(self):
+        from app.virtual import evaluate
+
+        portfolio = {"id": "p", "market": "KR", "currency": "KRW", "created_date": "2026-11-01", "end_date": "2026-11-06",
+                     "capital": 1_000_000, "rules": {"auto_sell": True, "trail": 0.10},
+                     "picks": [{"symbol": "A", "name": "에이", "weight": 0.5}, {"symbol": "B", "name": "비", "weight": 0.5}]}
+        prices = {
+            "A": [{"date": f"2026-11-0{day}", "open": 100 if day == 2 else close, "close": close}
+                  for day, close in zip(range(2, 7), [100, 120, 105, 90, 95])],
+            "B": [{"date": f"2026-11-0{day}", "open": 100, "close": 100} for day in range(2, 7)],
+        }
+        result = evaluate(portfolio, prices, [], "2026-11-07")
+        holdings = {holding["symbol"]: holding for holding in result["holdings"]}
+        self.assertEqual(holdings["A"]["status"], "sold")
+        self.assertEqual(holdings["A"]["sold_date"], "2026-11-04")  # 120 → 105(−12.5%)인 날 종가에 판 것으로
+        self.assertEqual(holdings["A"]["last_price"], 105)
+        self.assertEqual(result["sold_count"], 1)
+        values = {row["date"]: row["value"] for row in result["series"]}
+        self.assertEqual(values["2026-11-04"], values["2026-11-06"])  # 판 뒤에는 값이 고정(B는 그대로)
+        self.assertEqual(holdings["B"]["signal"]["level"], "hold")
+        manual = evaluate({**portfolio, "rules": {"auto_sell": False}}, prices, [], "2026-11-07")
+        manual_a = next(holding for holding in manual["holdings"] if holding["symbol"] == "A")
+        self.assertEqual(manual_a["status"], "bought")
+        self.assertEqual(manual_a["signal"]["level"], "sell")  # 자동 매도를 끄면 신호만 보여 줌
+        self.assertEqual(manual["signal_counts"]["sell"], 1)
+
+    async def test_short_hold_filters_overheated_and_sets_weights(self):
+        from datetime import datetime
+        from unittest import mock
+
+        from app import virtual
+        from app.briefing import KST
+
+        fake = FakeRedis()
+        recommendations = {"ai_picks": [
+            {"symbol": "HOT", "name": "과열", "evidence": {"score": 80}, "rates": {"5d": 25.0, "20d": 40.0}, "volatility": 4.0},
+            {"symbol": "WEAK", "name": "약함", "evidence": {"score": 40}, "rates": {"5d": 1.0, "20d": 2.0}, "volatility": 2.0},
+            {"symbol": "OK1", "name": "좋음1", "evidence": {"score": 70}, "rates": {"5d": 2.0, "20d": 5.0}, "volatility": 1.0},
+            {"symbol": "OK2", "name": "좋음2", "evidence": {"score": 65}, "rates": {"5d": 3.0, "20d": 6.0}, "volatility": 3.0},
+            {"symbol": "OK3", "name": "좋음3", "evidence": {"score": 60}, "rates": {"5d": 1.0, "20d": 3.0}, "volatility": 2.5},
+        ], "themes": []}
+        today = datetime.now(KST).date()
+        with mock.patch.object(virtual, "redis", fake), \
+                mock.patch.object(virtual, "get_json", new=mock.AsyncMock(side_effect=lambda key: __import__("json").loads(fake.data[key]) if key in fake.data else None)):
+            short = await virtual.create_portfolio("alice", "kr", 1_000_000, "ai", today + timedelta(days=3), recommendations, None, auto_sell=True)
+            long = await virtual.create_portfolio("alice", "kr", 1_000_000, "ai", today + timedelta(days=40), recommendations, None, weak_market=True)
+            weak = await virtual.create_portfolio("alice", "kr", 1_000_000, "ai", today + timedelta(days=3), recommendations, None, weak_market=True)
+        self.assertAlmostEqual(sum(pick["weight"] for pick in weak["picks"]), 0.5, places=3)  # 단기 + 약세장: 절반만 투자
+        self.assertTrue(weak["rules"]["weak_market"])
+        self.assertFalse(long["rules"]["weak_market"])  # 길게 들고 있으면 약세장이어도 그대로
+        self.assertEqual([pick["symbol"] for pick in short["picks"]], ["OK1", "OK2", "OK3"])
+        self.assertEqual({item["symbol"] for item in short["excluded"]}, {"HOT", "WEAK"})
+        self.assertTrue(short["rules"]["filtered"] and short["rules"]["auto_sell"])
+        self.assertEqual(len(long["picks"]), 5)  # 길게 들고 있으면 거르지 않음
+        weights = {pick["symbol"]: pick["weight"] for pick in long["picks"]}
+        self.assertGreater(weights["OK1"], weights["HOT"])  # 변동성이 작은 쪽이 더 많이
+        self.assertFalse(long["rules"]["filtered"])
+        self.assertAlmostEqual(sum(pick["weight"] for pick in long["picks"]), 1, places=3)
+
+
+class DailyRecordTest(unittest.TestCase):
+    def test_due_record_session(self):
+        from datetime import datetime
+
+        from app.api.insight_routes import due_record_session
+        from app.briefing import KST
+
+        def at(day, hour, minute=0):
+            return datetime(2026, 11, day, hour, minute, tzinfo=KST)
+
+        self.assertIsNone(due_record_session("kr", at(17, 15, 50)))  # 마감 15분 전
+        self.assertEqual(due_record_session("kr", at(17, 16, 0)), "2026-11-17")
+        self.assertIsNone(due_record_session("kr", at(17, 23, 0)))  # 6시간 지나면 건너뜀
+        self.assertEqual(due_record_session("us", at(18, 7, 0)), "2026-11-17")  # 미장 화요일 장은 한국 수요일 아침
+        self.assertIsNone(due_record_session("kr", at(21, 16, 0)))  # 토요일
+        self.assertEqual(due_record_session("us", at(21, 7, 0)), "2026-11-20")  # 토요일 아침 = 금요일 미장
+        self.assertIsNone(due_record_session("us", at(23, 7, 0)))  # 월요일 아침: 일요일 미장 없음

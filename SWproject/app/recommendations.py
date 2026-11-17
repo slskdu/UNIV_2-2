@@ -494,6 +494,7 @@ def _validated_picks(items: Any, pool: list[tuple[tuple[dict[str, Any], dict[str
         picks.append({
             "symbol": symbol, "name": stock["name"], "currency": stock["currency"], "close": stock["close"],
             "rates": stock["rates"], "warnings": stock["warnings"], "evidence": stock.get("evidence"),
+            "volatility": stock.get("volatility"),
             "theme": theme["name"], "theme_sector_id": theme["sector_id"], "theme_kind": theme["kind"],
             **{key: str(item.get(key) or "").strip() for key in keys},
         })

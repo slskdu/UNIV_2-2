@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api.account_routes import router as account_router
+from .api.insight_routes import daily_record_loop
 from .api.insight_routes import router as insight_router
 from .api.routes import page_router, router
 from .api.virtual_routes import router as virtual_router
@@ -30,10 +31,11 @@ async def lifespan(app: FastAPI):
     collector_task = asyncio.create_task(collector_loop(toss_api, settings))
     sector_flow_task = asyncio.create_task(sector_flow_loop(toss_api))
     master_task = asyncio.create_task(load_master(toss_api))  # 종목 이름 검색용 전체 종목 목록을 미리 받아 둡니다
+    record_task = asyncio.create_task(daily_record_loop(toss_api))  # 장 마감 뒤 추천을 하루 한 번 자동 기록
     try:
         yield
     finally:
-        for task in (collector_task, sector_flow_task, master_task):
+        for task in (collector_task, sector_flow_task, master_task, record_task):
             task.cancel()
             with suppress(asyncio.CancelledError):
                 await task
