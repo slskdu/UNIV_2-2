@@ -522,6 +522,14 @@ def status_lines(snapshot: dict[str, Any], holding: dict[str, Any] | None, news:
             "tone": "pos" if (rate or 0) > 0 else "neg" if (rate or 0) < 0 else "info",
             "text": f"보유 {holding['quantity']:g}주 · 평균가 {holding['average_price']:,.2f} · 수익률 {rate:+.2f}%" if rate is not None else f"보유 {holding['quantity']:g}주",
         })
+    if snapshot.get("currency") == "USD" and snapshot.get("_candles"):
+        # 미국 주식은 외국인·기관 수급 자료가 없어 거래량으로 본 매수·매도 압력을 참고로 보여 줍니다(app/signals.py).
+        from .signals import pressure_factor
+
+        pressure = pressure_factor(snapshot["_candles"])
+        if pressure:
+            lines.append({"tone": "pos" if pressure["signal"] > 0 else "neg" if pressure["signal"] < 0 else "info",
+                          "text": f"{pressure['label']}: {pressure['value']}"})
     if news:
         lines.append({"tone": "pos" if news["positive"] > news["negative"] else "neg" if news["negative"] > news["positive"] else "info",
                       "text": f"최근 기사 호재 {news['positive']}·악재 {news['negative']}건 (논조 '{news['tone']}')"})
@@ -566,7 +574,7 @@ async def stock_status(api: TossApiClient, client: AccountClient | None, usernam
             from .exit_signals import exit_signals
             from .signals import compute_signals
 
-            evidence = compute_signals(snapshot["_candles"], snapshot["warnings"])
+            evidence = compute_signals(snapshot["_candles"], snapshot["warnings"])  # 참고 근거(압력)는 점수에 영향 없음
             exit_signal = exit_signals(snapshot["_candles"], holding["average_price"], None, evidence["score"])
         return {
             **entry, "close": snapshot["close"], "currency": snapshot["currency"], "day_change": snapshot.get("day_change"),

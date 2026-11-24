@@ -94,11 +94,24 @@ docker compose -f docker-compose.prod.yml restart app     # .env만 바꿨을 �
 
 ## 6. (선택) PC의 데이터 옮기기
 
-PC의 회원·가상 포트폴리오를 그대로 쓰려면, **PC와 같은 `APP_SECRET_KEY`**를 서버 `.env`에 넣고(다르면 저장된 토스 키를 풀 수 없음) PC Redis의 dump.rdb를 서버 볼륨에 넣어야 합니다. 새로 시작하는 편이 간단하므로, 필요할 때 따로 진행합니다.
+PC의 회원·가상 포트폴리오를 그대로 쓰려면, **PC와 같은 `APP_SECRET_KEY`**를 서버 `.env`에 넣고(다르면 저장된 토스 키를 풀 수 없음) PC Redis의 dump.rdb를 서버 볼륨에 넣어야 합니다.
 
-## HTTPS 붙이기(공개 운영 전)
+실제로는(2026-11-25) 비밀값을 옮기지 않으려고, 필요한 키(`user:v1:*`, `vp:v1:*`, `rec:history:v1:*`, `account:watchlist:*`, `insight:translation:*`)만 내보내 서버에 넣었습니다(이미 있는 키는 덮지 않음). 회원 레코드의 개인 토스 키는 빼고(서버 비밀값으로는 못 풂) 실제 주문 허용도 꺼서 옮겼으므로, HTTPS 화면에서 토스 키를 다시 등록합니다.
 
-1. 도메인 준비(구매 또는 DuckDNS 같은 무료 서브도메인) → 서버 IP로 연결
-2. 방화벽에 443 열기, 앱 포트를 `127.0.0.1:9000:9000`으로 바꾸고 앞에 Caddy(자동 인증서)를 둠
-3. `.env`: `ALLOWED_HOSTS`에 도메인 추가, `SESSION_COOKIE_SECURE=true`
-4. 프록시 뒤에서는 접속자 IP가 프록시 IP로 보이므로, 남용 제한이 IP별로 동작하게 uvicorn에 `--proxy-headers --forwarded-allow-ips=<프록시 IP>`를 추가
+## HTTPS (적용됨)
+
+`docker-compose.prod.yml`에 Caddy가 들어 있어 Let's Encrypt 인증서를 자동으로 받고 갱신합니다. 앱은 바깥에 열지 않고(`127.0.0.1:9000`) Caddy만 80·443을 받습니다.
+
+1. 주소: 도메인이 없으면 `<IP를 -로 이은 것>.sslip.io`(예: `203-0-113-10.sslip.io`)를 씁니다. 이름이 곧 IP라 가입이 필요 없습니다. 도메인을 사면 그 이름으로 바꾸면 됩니다.
+2. 방화벽: 클라우드 보안 목록(Oracle: VCN → 서브넷 → Security List → Ingress)과 VM 안 iptables 모두에서 **80·443** 열기. 80은 인증서 발급 확인과 https로 넘기기에 필요합니다.
+3. 서버 `.env`: `SITE_DOMAIN=<주소>`, `ALLOWED_HOSTS`에 그 주소 추가, `SESSION_COOKIE_SECURE=true`
+4. 앱은 `--proxy-headers --forwarded-allow-ips=*`로 실행해(compose의 `command`) Caddy가 넘겨 주는 실제 접속자 IP로 남용 제한을 겁니다. 앱 포트가 바깥에 안 열려 있어야 안전합니다.
+5. `docker volume rm market-caddy-data`는 하지 마세요(인증서를 다시 받아야 하고 발급 횟수 제한이 있음).
+
+### Oracle Cloud 메모
+
+- 무료 ARM(A1.Flex)은 자리 부족(Out of capacity)이 잦아 `VM.Standard.E2.1.Micro`(x86, 1GB)로 시작. 메모리가 작아 스왑 2GB 추가:
+  `sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile && echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab`
+- Oracle Ubuntu는 iptables가 22번 외에는 막혀 있음. REJECT 줄 앞에 넣고 저장:
+  `sudo iptables -I INPUT <REJECT 줄 번호> -p tcp --dport 443 -m state --state NEW -j ACCEPT && sudo netfilter-persistent save`
+- 토스 Open API 허용 IP에 일본(도쿄) 리전 IP도 등록됨.

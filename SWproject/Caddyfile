@@ -1,0 +1,12 @@
+# 운영 서버 HTTPS(docker-compose.prod.yml의 caddy). 인증서는 Let's Encrypt에서 자동 발급·갱신됩니다.
+# SITE_DOMAIN은 서버 .env에서 받습니다(예: 203-0-113-10.sslip.io — 이름이 곧 서버 IP라 따로 가입이 필요 없음).
+{$SITE_DOMAIN} {
+	encode gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "same-origin"
+		-Server
+	}
+	reverse_proxy app:9000
+}

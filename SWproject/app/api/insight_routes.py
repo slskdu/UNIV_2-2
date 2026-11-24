@@ -472,7 +472,23 @@ async def _compute_recommendations(api: TossApiClient, market: str) -> dict[str,
         await record_recommendations(market, result)
     except Exception:
         logger.exception("recommendation record failed")
+    # 종목별 판단 기록(app/stock_memory.py): AI 추천·위험 이유와 그때 가격, 나중에 1·5·20거래일 성적을 채움
+    from ..managed_live import price_day
+    from ..stock_memory import events_from_recommendation, safe_remember
+
+    now = datetime.now(KST)
+    await safe_remember(market, events_from_recommendation(result, now.strftime("%Y-%m-%d %H:%M"), price_day(market, now)))
     return result
+
+
+@router.get("/stock-memory")
+async def stock_memory(market: Literal["kr", "us"] = Query("kr"), symbol: str = Query(..., min_length=1, max_length=20, pattern=r"^[A-Za-z0-9.\-]+$")):
+    """한 종목에 대한 판단 기록(AI 추천·위험·점검·자동 운용 매매)과 판단 뒤 성적(1·5·20거래일, 지수 대비)."""
+    from ..stock_memory import memory_key, summarize
+
+    events = await get_json(memory_key(market, symbol.upper() if market == "us" else symbol)) or []
+    today = datetime.now(KST).strftime("%Y-%m-%d")
+    return {"market": market, "symbol": symbol, "events": events[-60:], "summary": summarize(events, today)}
 
 
 # --- 추천 매일 자동 기록 ------------------------------------------------------------------------
@@ -515,6 +531,44 @@ async def daily_record_loop(api: TossApiClient) -> None:
                 await redis.delete(flag)
                 logger.exception("daily recommendation record failed: %s", market)
         await asyncio.sleep(AUTO_RECORD_CHECK_SECONDS)
+
+
+# --- 장중 추천 갱신 -------------------------------------------------------------------------------
+# 장이 열려 있는 동안 30분마다 추천을 새로 계산합니다(AI분석 탭 캐시와 추천 기록이 같이 바뀌고, 자동 운용이 다음 확인 때 반영).
+# 장 시작 20분 안은 첫 봉이 크게 출렁여 건너뜁니다. Redis 표시(nx·30분 만료)로 서버를 다시 켜도 30분 간격을 지킵니다.
+INTRADAY_REFRESH = timedelta(minutes=30)
+INTRADAY_SKIP_OPEN = timedelta(minutes=20)
+INTRADAY_CHECK_SECONDS = 5 * 60
+
+
+def intraday_refresh_due(market: str, now: datetime) -> bool:
+    from ..managed_live import SESSIONS, market_session
+
+    is_open, _ = market_session(market, now)
+    if not is_open:
+        return False
+    zone, opens, _ = SESSIONS[market.upper()]
+    local = now.astimezone(zone)
+    return local - local.replace(hour=opens.hour, minute=opens.minute, second=0, microsecond=0) >= INTRADAY_SKIP_OPEN
+
+
+async def intraday_recommend_loop(api: TossApiClient) -> None:
+    await asyncio.sleep(120)  # 서버를 켠 직후 다른 수집과 겹치지 않게
+    while True:
+        now = datetime.now(KST)
+        for market in ("kr", "us"):
+            if not intraday_refresh_due(market, now):
+                continue
+            if not await redis.set(f"insight:intraday-rec:{market}", now.strftime("%H:%M"), nx=True,
+                                   ex=int(INTRADAY_REFRESH.total_seconds())):
+                continue
+            try:
+                async with _recommendation_locks[market]:
+                    result = await _compute_recommendations(api, market)
+                logger.info("intraday recommendation refreshed: %s %s (%s)", market, result.get("generated_at"), result.get("method"))
+            except Exception:
+                logger.exception("intraday recommendation failed: %s", market)
+        await asyncio.sleep(INTRADAY_CHECK_SECONDS)
 
 
 # --- 추천 성과 검증 -------------------------------------------------------------------------

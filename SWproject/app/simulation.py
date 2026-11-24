@@ -400,8 +400,17 @@ async def record_recommendations(market: str, result: dict[str, Any]) -> None:
         picks[f"ai_risk:{stock['symbol']}"] = entry(stock, "ai_risk", stock.get("theme", ""))
     for stock in result.get("combined_picks", []):
         picks[f"combined:{stock['symbol']}"] = entry(stock, "combined", stock.get("theme", ""))
-    snapshot = {"date": today, "generated_at": result.get("generated_at"), "items": list(picks.values())}
+    if not any(item["kind"] in {"pick", "ai_pick", "combined"} for item in picks.values()):
+        # 추천 종목이 하나도 없는 결과(자료 부족·계산 실패)는 남기지 않습니다. 같은 날 앞서 남긴 기록이 있으면 그대로 둡니다.
+        logger.warning("recommendation record skipped (no picks): %s %s", market, today)
+        return
+    snapshot = {"date": today, "generated_at": result.get("generated_at"), "method": result.get("method"), "items": list(picks.values())}
     history = await get_json(_track_key(market)) or []
+    earlier = next((item for item in history if item["date"] == today), None)
+    if earlier and result.get("method") != "ai" and earlier.get("method", "ai") == "ai":
+        # AI가 잠깐 실패해 규칙 추천만 나온 장중 갱신이 그날 AI 추천을 덮어쓰지 않게(자동 운용이 AI 추천 종목을 잘못 팔지 않게)
+        logger.warning("recommendation record kept earlier AI result: %s %s", market, today)
+        return
     history = [item for item in history if item["date"] != today] + [snapshot]
     await redis.set(_track_key(market), json.dumps(history[-120:], ensure_ascii=False))
 

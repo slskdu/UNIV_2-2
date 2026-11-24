@@ -374,14 +374,16 @@ async def theme_stocks(api: TossApiClient, sector: dict[str, Any], rows: list[di
             "flagged": [_without_candles(item) for item in flagged]}
 
 
-COMBINED_PICKS = 5
+COMBINED_PICKS = 5  # 통합 추천 최소 개수(AI 추천이 이보다 많으면 AI 추천을 모두 담음)
 
 
-def combined_picks(themes: list[dict[str, Any]], ai_picks: list[dict[str, Any]], limit: int = COMBINED_PICKS) -> list[dict[str, Any]]:
+def combined_picks(themes: list[dict[str, Any]], ai_picks: list[dict[str, Any]], limit: int | None = None) -> list[dict[str, Any]]:
     """통합 추천: ① AI·테마 양쪽에서 모두 추천된 종목(근거 점수 순) → ② 나머지 AI 추천 → ③ 남는 자리를 테마 종목 근거 점수 순.
 
+    개수는 AI 추천 수와 COMBINED_PICKS 중 큰 쪽(AI가 고른 종목은 빠짐없이 들어감).
     기존 "AI 추천 종목"·"추천 테마"는 그대로 두고 덧붙이는 목록입니다. 종목마다 via(ai·theme)로 출처를 남깁니다.
     """
+    limit = limit or max(COMBINED_PICKS, len(ai_picks))
     def evidence(stock: dict[str, Any]) -> float:
         return (stock.get("evidence") or {}).get("score") or 0
 
@@ -441,7 +443,8 @@ def rule_summary(market: str, trend: list[dict[str, Any]], rebound: list[dict[st
     return " ".join(parts)
 
 
-AI_PICKS_MIN, AI_PICKS_MAX = 3, 5
+# 추천 종목 수는 AI가 정합니다(근거가 충분한 만큼, 최소 1개 · 후보 목록 안에서). 예전에는 3~5개로 고정했습니다.
+AI_PICKS_MIN = 1
 AI_RISK_PICKS_MAX = 4
 AI_POOL_PER_THEME = 4  # AI에 보내는 테마별 후보 수. 많으면 무료 AI의 분당 토큰 한도를 넘기 쉽습니다.
 
@@ -530,7 +533,8 @@ async def ai_recommend(
         "추천 이유와 위험 근거에는 가능하면 plus·minus의 구체적 근거를 인용한다. event가 있는 종목은 그날 분할·분사·병합 같은 권리 변동이 있었을 수 있어 "
         "수익률·낙폭이 실제 손익과 다를 수 있으니, 그 수치만으로 위험하다고 단정하지 말고 쓸 때는 그 점을 밝힌다. "
         "기간은 '1개월·3개월'이나 '거래일' 대신 '20일·60일'처럼 일수로 쓴다. "
-        f"① 후보종목 가운데 테마 흐름·기사 논조·종목의 상대 강도·20일 평균선 위치를 종합해 가장 주목할 종목 {AI_PICKS_MIN}~{AI_PICKS_MAX}개를 골라 추천한다(picks). "
+        "① 후보종목 가운데 테마 흐름·기사 논조·종목의 상대 강도·20일 평균선 위치를 종합해 주목할 종목을 골라 추천한다(picks). "
+        f"개수는 정해져 있지 않다: 근거가 충분한 종목은 모두 고르고 근거가 약하면 적게 고른다(최소 {AI_PICKS_MIN}개, 후보종목 수 이내). "
         "단기 급등, 큰 변동폭, 큰 낙폭, 유의사항은 감점 요소로 따지고, 한 테마에 몰리지 않게 고려한다. "
         f"② 위험후보종목 가운데 약한 흐름·20일 평균선 아래·큰 변동폭·큰 낙폭·유의사항이 겹쳐 특히 주의할 종목을 최대 {AI_RISK_PICKS_MAX}개 고른다(risk_picks). "
         "위험 종목은 매도 권유가 아니라 주의할 점을 알리는 것이다. "
@@ -548,7 +552,7 @@ async def ai_recommend(
     )
     parsed = json.loads(answer)
     summary = str(parsed.get("summary") or "").strip()
-    picks = _validated_picks(parsed.get("picks"), pool, AI_PICKS_MAX, ("reason", "risk"))
+    picks = _validated_picks(parsed.get("picks"), pool, len(pool), ("reason", "risk"))
     risk_picks = _validated_picks(parsed.get("risk_picks"), risk_pool, AI_RISK_PICKS_MAX, ("reason",))
     if not summary or not picks:
         raise ValueError("unexpected AI recommendation shape")
@@ -663,7 +667,8 @@ async def build_recommendations(api: TossApiClient, market: str) -> dict[str, An
             "(투자경고·위험·정리매매 종목은 제외해 위험 쪽에 표시). 위험 테마: 1주·20일 모두 내리거나(하락 지속) 오르다 꺾인 분야(모자라면 20일이 마이너스인 분야) 중 "
             "점수가 낮은 순서(악재 기사가 많으면 더 위험), 위험 종목: 분야 안에서 20·60일이 약하고 20일 평균선 아래, "
             "변동성·낙폭이 크거나 유의사항이 있을수록 위험 점수가 높습니다. AI: 테마마다 점수 상위 4개 종목의 수치와 테마 근거·기사 제목을 "
-            "비교해 추천 3~5개, 위험 최대 4개를 골랐습니다(후보 목록 밖 종목은 고를 수 없음)."
+            "비교해 추천 종목(개수는 AI가 근거에 따라 정함)과 위험 최대 4개를 골랐습니다(후보 목록 밖 종목은 고를 수 없음). "
+            "통합 추천은 AI 추천을 모두 담고, 5개보다 적으면 테마 종목으로 채웁니다."
         ),
         "caveat": CAVEAT,
     }

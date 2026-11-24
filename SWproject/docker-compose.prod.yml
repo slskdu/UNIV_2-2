@@ -1,6 +1,26 @@
 # 운영 서버(클라우드 리눅스 VM)용. 개발용 docker-compose.yml과 달리 Redis를 바깥에 열지 않고, 앱도 함께 띄웁니다.
 # 실행: docker compose -f docker-compose.prod.yml up -d --build   (자세한 순서는 DEPLOY.md)
+# 바깥 요청은 Caddy(80·443)만 받고 HTTPS로 앱에 넘깁니다. 주소는 .env의 SITE_DOMAIN(예: 203-0-113-10.sslip.io).
 services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: market-caddy
+    ports:
+      - "80:80"     # 인증서 발급 확인 + https로 넘기기
+      - "443:443"
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:?SITE_DOMAIN을 .env에 넣으세요}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data        # 인증서(지우면 다시 발급받음 → 발급 횟수 제한 주의)
+      - caddy-config:/config
+    depends_on:
+      - app
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
   app:
     build: .
     container_name: market-app
@@ -8,9 +28,13 @@ services:
     environment:
       # .env의 REDIS_URL(localhost)은 개발용이라 여기서 덮어씁니다.
       REDIS_URL: redis://redis:6379/0
+    # 바깥에 포트를 열지 않습니다(Caddy만 app:9000으로 접근). 서버 안에서 확인할 때만 127.0.0.1:9000.
     ports:
-      # 시험 배포: http://<서버 IP>/ 로 접속. HTTPS를 붙이면 이 줄을 "127.0.0.1:9000:9000"으로 바꾸고 앞에 Caddy를 둡니다.
-      - "${APP_PORT:-80}:9000"
+      - "127.0.0.1:9000:9000"
+    # Caddy가 넘겨 주는 X-Forwarded-For로 실제 접속자 IP를 봅니다(남용 제한이 IP별로 동작).
+    # 앱 포트가 바깥에 안 열려 있어 Caddy·서버 안에서만 이 헤더를 보낼 수 있으므로 모든 프록시 IP를 믿어도 됩니다.
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "9000", "--workers", "1",
+              "--proxy-headers", "--forwarded-allow-ips=*"]
     depends_on:
       redis:
         condition: service_healthy
@@ -36,3 +60,7 @@ services:
 volumes:
   redis-data:
     name: market-redis-data
+  caddy-data:
+    name: market-caddy-data
+  caddy-config:
+    name: market-caddy-config

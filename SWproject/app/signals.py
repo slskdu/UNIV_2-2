@@ -8,6 +8,10 @@
 
 11-17 근거별 검증(국장·미장 약 1년, 앞·뒤 절반): "거래량 동반 상승"은 이후 수익이 표본 평균보다 오히려 낮아(국장 두 절반 모두)
 점수에서는 중립(0)으로 두고 화면에는 참고로만 보여 줍니다. "거래량 동반 하락"은 그대로 부정 근거입니다.
+
+미국 주식은 토스 투자자별 매매(외국인·기관 수급) API가 국내 종목만 지원해(unsupported-market), 대신 최근 20일 오른 날·내린 날
+거래량 비율로 "매수·매도 압력"을 보여 줍니다. 11-23 검증(미장 60종목 약 1년)에서 앞·뒤 절반의 방향이 뒤집혀 예측력이 없어
+가중치 0(점수에 넣지 않는 참고 근거)으로 둡니다.
 """
 import asyncio
 import logging
@@ -26,7 +30,10 @@ FLOW_DAYS = 5
 WEIGHTS = {
     "ma_alignment": 2.0, "year_position": 1.0, "momentum": 1.5, "rsi": 1.0, "volume": 1.0,
     "volatility": 1.0, "drawdown": 1.0, "flows": 1.5, "warnings": 2.0, "news": 1.0,
+    "pressure": 0.0,  # 미국 주식용 참고 근거(점수에 넣지 않음)
 }
+PRESSURE_DAYS = 20
+PRESSURE_HIGH, PRESSURE_LOW = 0.6, 0.4
 TECHNICAL_KEYS = ("ma_alignment", "year_position", "momentum", "rsi", "volume", "volatility", "drawdown")
 
 
@@ -156,6 +163,32 @@ def flow_factor(records: list[dict[str, Any]]) -> dict[str, Any] | None:
     return _factor("flows", label, value, signal, "외국인과 기관의 방향이 엇갈립니다.")
 
 
+def pressure_factor(candles: list[dict[str, Any]], days: int = PRESSURE_DAYS) -> dict[str, Any] | None:
+    """최근 days일 중 오른 날의 거래량 비율로 본 매수·매도 압력(미국 주식의 수급 대신 보여 주는 참고 근거, 점수에는 넣지 않음)."""
+    rows = [candle for candle in candles if candle.get("close")]
+    if len(rows) <= days:
+        return None
+    up = down = 0.0
+    for previous, current in zip(rows[-days - 1:-1], rows[-days:]):
+        volume = current.get("volume") or 0.0
+        if current["close"] > previous["close"]:
+            up += volume
+        elif current["close"] < previous["close"]:
+            down += volume
+    if up + down <= 0:
+        return None
+    ratio = up / (up + down)
+    value = f"최근 {days}일 오른 날 거래량 {ratio * 100:.0f}% · 내린 날 {100 - ratio * 100:.0f}%"
+    note = "미국 주식은 외국인·기관 수급 자료가 없어 대신 보여 주는 참고 지표입니다(과거 검증에서 예측력이 일관되지 않아 점수에는 넣지 않음)."
+    if ratio >= PRESSURE_HIGH:
+        factor = _factor("pressure", "매수 압력 우위(참고)", value, 1, "오른 날에 거래가 더 몰렸습니다. " + note)
+    elif ratio <= PRESSURE_LOW:
+        factor = _factor("pressure", "매도 압력 우위(참고)", value, -1, "내린 날에 거래가 더 몰렸습니다. " + note)
+    else:
+        factor = _factor("pressure", "매수·매도 압력 비슷(참고)", value, 0, "오른 날·내린 날 거래량이 비슷합니다. " + note)
+    return {**factor, "reference": True}
+
+
 def warning_factor(warnings: list[dict[str, Any]]) -> dict[str, Any]:
     if warnings:
         labels = ", ".join(warning["label"] for warning in warnings)
@@ -214,17 +247,20 @@ def summarize_evidence(factors: list[dict[str, Any]]) -> dict[str, Any]:
         "score": score,
         "grade": grade,
         "factors": factors,
-        "positives": [f"{factor['label']}: {factor['value']}" for factor in factors if factor["signal"] > 0],
-        "negatives": [f"{factor['label']}: {factor['value']}" for factor in factors if factor["signal"] < 0],
+        # 가중치 0인 참고 근거는 긍정·부정 목록(AI 입력에도 쓰임)에 넣지 않습니다.
+        "positives": [f"{factor['label']}: {factor['value']}" for factor in factors if factor["signal"] > 0 and factor["weight"]],
+        "negatives": [f"{factor['label']}: {factor['value']}" for factor in factors if factor["signal"] < 0 and factor["weight"]],
     }
 
 
 def compute_signals(candles: list[dict[str, Any]], warnings: list[dict[str, Any]] | None = None,
-                    flow_records: list[dict[str, Any]] | None = None, news_digest: dict[str, Any] | None = None) -> dict[str, Any]:
+                    flow_records: list[dict[str, Any]] | None = None, news_digest: dict[str, Any] | None = None,
+                    pressure: bool = False) -> dict[str, Any]:
+    """pressure=True(미국 주식)면 수급 대신 매수·매도 압력 참고 근거를 붙입니다(점수에는 영향 없음)."""
     factors = technical_factors(candles)
     if warnings is not None:
         factors.append(warning_factor(warnings))
-    for extra in (flow_factor(flow_records or []), news_factor(news_digest)):
+    for extra in (flow_factor(flow_records or []), news_factor(news_digest), pressure_factor(candles) if pressure else None):
         if extra:
             factors.append(extra)
     return summarize_evidence(factors)
@@ -249,7 +285,7 @@ async def stock_evidence(api: TossApiClient, symbol: str, market_country: str, c
             logger.info("investor trading unavailable: %s", symbol)
     news_cache = await get_json(f"insight:stock-news:v10:{symbol}:7")
     digest = news_cache.get("news_digest") if news_cache and news_cache.get("found") else None
-    return compute_signals(candles, warnings, flows, digest)
+    return compute_signals(candles, warnings, flows, digest, pressure=market_country != "KR")
 
 
 async def evidence_for(api: TossApiClient, stocks: list[dict[str, Any]], market_country: str,

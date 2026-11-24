@@ -14,8 +14,11 @@ from ..redis_client import get_json, set_json
 from ..simulation import _candles, market_is_weak
 from ..toss_api import TossApiError
 from ..virtual import (
+    MAX_COUNT,
     NAME_MAX,
     SOURCE_LABELS,
+    change_end_date,
+    set_managed,
     create_portfolio,
     delete_portfolio,
     evaluate_portfolios,
@@ -97,6 +100,10 @@ class PortfolioInput(BaseModel):
     # 비워 두면 "국장 통합 추천 11-15"처럼 자동으로 붙이고, 같은 이름이 있으면 (2)…를 붙입니다.
     name: str | None = Field(None, max_length=NAME_MAX)
     auto_sell: bool = True  # 매도 신호(고점 대비 −10%)가 나면 그날 종가에 판 것으로 처리
+    count: int | None = Field(None, ge=1, le=MAX_COUNT)  # 비우면 추천이 고른 수 그대로(화면은 항상 비움)
+    # 자동 운용: 종료일 없이 계속, 매도 신호로 판 돈으로 최신 추천 종목을 다시 삼. rotate = 새 추천에서 빠진 종목도 교체
+    managed: bool = False
+    rotate: bool = False
 
 
 @router.post("/portfolios", dependencies=checked_write)
@@ -104,10 +111,13 @@ async def new_portfolio(request: Request, payload: PortfolioInput, user: dict = 
     """AI분석 탭의 지금 추천대로 가상 포트폴리오를 만듭니다(다음 거래일 시가 매수, 종료일 종가까지 평가)."""
     today = datetime.now(KST).date()
     end_date = payload.end_date or next_tuesday(today)
-    if end_date <= today:
-        raise HTTPException(status_code=422, detail="종료일은 오늘 이후로 정하세요.")
-    if (end_date - today).days > 180:
-        raise HTTPException(status_code=422, detail="종료일은 180일 안으로 정하세요.")
+    if not payload.managed:  # 자동 운용은 종료일 없이 계속(나중에 종료일을 정하면 그날로 끝남)
+        if end_date <= today:
+            raise HTTPException(status_code=422, detail="종료일은 오늘 이후로 정하세요.")
+        if (end_date - today).days > 180:
+            raise HTTPException(status_code=422, detail="종료일은 180일 안으로 정하세요.")
+    elif end_date <= today:
+        end_date = next_tuesday(today)
     recommendations = await latest_recommendations(payload.market)
     if not recommendations:
         # 오늘 이 시장 추천이 아직 없으면 AI분석 탭과 같은 방식으로 지금 계산합니다(1~2분, 결과는 AI분석 탭에도 저장).
@@ -139,7 +149,8 @@ async def new_portfolio(request: Request, payload: PortfolioInput, user: dict = 
             # 세 가지 비교는 이름 뒤에 방식을 붙여 구분합니다.
             name = f"{payload.name} · {SOURCE_LABELS[source]}" if payload.name and len(sources) > 1 else payload.name
             created.append(await create_portfolio(user["username"], payload.market, payload.capital_krw, source, end_date,
-                                                  recommendations, fx, group, name, payload.auto_sell, weak_market))
+                                                  recommendations, fx, group, name, payload.auto_sell, weak_market,
+                                                  payload.count, payload.managed, payload.rotate))
         except ValueError as error:
             if len(sources) == 1:
                 raise HTTPException(status_code=409, detail=str(error)) from error
@@ -154,13 +165,34 @@ async def remove_portfolio(portfolio_id: str = Path(pattern=r"^[0-9a-f]{12}$"), 
     return {"deleted": portfolio_id}
 
 
-class RenameInput(BaseModel):
-    name: str = Field(min_length=1, max_length=NAME_MAX)
+class UpdateInput(BaseModel):
+    # 이름 바꾸기, 종료일 바꾸기(자동 운용이면 운용 끝내기), 자동 운용 켜기/끄기 중 하나 이상
+    name: str | None = Field(None, min_length=1, max_length=NAME_MAX)
+    end_date: date | None = None
+    managed: bool | None = None
+    rotate: bool = False
 
 
 @router.patch("/portfolios/{portfolio_id}", dependencies=checked_write)
-async def rename(payload: RenameInput, portfolio_id: str = Path(pattern=r"^[0-9a-f]{12}$"), user: dict = Depends(current_user)):
-    try:
-        return {"portfolio": await rename_portfolio(user["username"], portfolio_id, payload.name)}
-    except ValueError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
+async def update(payload: UpdateInput, portfolio_id: str = Path(pattern=r"^[0-9a-f]{12}$"), user: dict = Depends(current_user)):
+    if payload.name is None and payload.end_date is None and payload.managed is None:
+        raise HTTPException(status_code=422, detail="바꿀 이름·종료일·자동 운용 중 하나를 넣으세요.")
+    result = {}
+    if payload.managed is not None:
+        try:
+            result["portfolio"] = await set_managed(user["username"], portfolio_id, payload.managed, payload.rotate)
+        except LookupError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+    if payload.end_date is not None:
+        try:
+            result["portfolios"] = await change_end_date(user["username"], portfolio_id, payload.end_date)
+        except LookupError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+    if payload.name is not None:
+        try:
+            result["portfolio"] = await rename_portfolio(user["username"], portfolio_id, payload.name)
+        except ValueError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+    return result

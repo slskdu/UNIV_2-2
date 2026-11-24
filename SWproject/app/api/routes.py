@@ -91,7 +91,8 @@ MARKET_TREND_PAGE = """<!doctype html>
         details.evidence summary { cursor: pointer; font-size: 12px; color: #475467; margin-top: 4px; }
         .sim-table { width: 100%; border-collapse: collapse; font-size: 13px; }
         .sim-table th, .sim-table td { padding: 6px 8px; border-bottom: 1px solid #edf0f4; text-align: right; }
-        .sim-table th:first-child, .sim-table td:first-child { text-align: left; }
+        .sim-table th:first-child, .sim-table td:first-child { text-align: left; min-width: 150px; }
+        .reason-line { display: block; margin-top: 2px; font-size: 11px; line-height: 1.4; color: #667085; white-space: normal; max-width: 320px; text-align: left; }
         .sim-verdict { border-radius: 10px; padding: 12px 14px; margin: 8px 0 12px; font-size: 15px; line-height: 1.6; }
         .sim-verdict.good { background: #ecfdf3; border: 1px solid #a6f4c5; color: #05603a; }
         .sim-verdict.bad { background: #fef3f2; border: 1px solid #fda29b; color: #912018; }
@@ -839,8 +840,10 @@ MARKET_TREND_PAGE = """<!doctype html>
         function evidenceDetails(evidence) {
             if (!evidence || !evidence.factors?.length) return "";
             const mark = signal => signal > 0 ? ["plus", "✓"] : signal < 0 ? ["minus", "✕"] : ["zero", "·"];
-            const items = evidence.factors.map(factor => { const [cls, symbol] = mark(factor.signal); return `<li class="${cls}">${symbol} <strong>${escapeHtml(factor.label)}</strong> — ${escapeHtml(factor.value)} <span class="code">${escapeHtml(factor.text)}</span></li>`; }).join("");
-            return `<details class="evidence"><summary>근거 보기 (긍정 ${evidence.factors.filter(factor => factor.signal > 0).length} · 부정 ${evidence.factors.filter(factor => factor.signal < 0).length})</summary><ul class="evidence-list">${items}</ul></details>`;
+            // 참고 근거(미국 주식의 매수·매도 압력)는 ◇로 따로 표시하고 긍정·부정 개수에 넣지 않습니다.
+            const scored = evidence.factors.filter(factor => !factor.reference);
+            const items = evidence.factors.map(factor => { const [cls, symbol] = mark(factor.signal); return `<li class="${cls}">${factor.reference ? "◇" : symbol} <strong>${escapeHtml(factor.label)}</strong> — ${escapeHtml(factor.value)} <span class="code">${escapeHtml(factor.text)}</span></li>`; }).join("");
+            return `<details class="evidence"><summary>근거 보기 (긍정 ${scored.filter(factor => factor.signal > 0).length} · 부정 ${scored.filter(factor => factor.signal < 0).length})</summary><ul class="evidence-list">${items}</ul></details>`;
         }
         // 통합 추천: AI·테마 양쪽 추천을 합친 목록(기존 "AI 추천 종목"·"추천 테마" 칸은 그대로 둡니다).
         function viaChips(pick) {
@@ -1249,7 +1252,7 @@ MARKET_TREND_PAGE = """<!doctype html>
                     list.innerHTML = "";
                     return;
                 }
-                form.innerHTML = `<div class="order-form"><select id="vp-market" aria-label="시장"><option value="kr">국장</option><option value="us">미장</option></select><input id="vp-capital" type="number" min="100000" step="100000" value="10000000" aria-label="투자 금액(원)" style="width:150px"><span class="code">원</span><select id="vp-source" aria-label="따라 살 추천"><option value="all">통합 추천 (AI + 테마)</option><option value="ai">AI 추천 종목만</option><option value="theme">추천 테마 종목만(근거 점수 순)</option><option value="compare">세 가지 모두 만들어 비교</option></select><label class="code"><input id="vp-autosell" type="checkbox" checked> 매도 신호가 나면 판 것으로 처리</label><input id="vp-name" maxlength="40" placeholder="이름 (비워 두면 자동)" aria-label="포트폴리오 이름" style="width:180px"><label class="code">종료일 <input id="vp-end" type="date" value="${escapeHtml(defaults.next_tuesday)}" min="${escapeHtml(defaults.today)}" aria-label="종료일"></label><button type="button" data-virtual-action="create">가상 포트폴리오 만들기</button></div>
+                form.innerHTML = `<div class="order-form"><select id="vp-market" aria-label="시장"><option value="kr">국장</option><option value="us">미장</option></select><input id="vp-capital" type="number" min="100000" step="100000" value="10000000" aria-label="투자 금액(원)" style="width:150px"><span class="code">원</span><select id="vp-source" aria-label="따라 살 추천"><option value="all">통합 추천 (AI + 테마)</option><option value="ai">AI 추천 종목만</option><option value="theme">추천 테마 종목만(근거 점수 순)</option><option value="compare">세 가지 모두 만들어 비교</option></select><label class="code"><input id="vp-autosell" type="checkbox" checked> 매도 신호가 나면 판 것으로 처리</label><label class="code" title="종료일 없이 계속: 매도 신호로 판 돈으로 다음 거래일 시가에 최신 AI분석 추천 종목을 삽니다"><input id="vp-managed" type="checkbox"> 자동 운용(팔면 최신 추천으로 다시 사기)</label><label class="code" title="새 AI분석이 나오면 추천에서 빠진 보유 종목을 팔고 새 추천으로 바꿉니다"><input id="vp-rotate" type="checkbox"> 새 추천으로 교체</label><input id="vp-name" maxlength="40" placeholder="이름 (비워 두면 자동)" aria-label="포트폴리오 이름" style="width:180px"><label class="code">종료일 <input id="vp-end" type="date" value="${escapeHtml(defaults.next_tuesday)}" min="${escapeHtml(defaults.today)}" aria-label="종료일"></label><button type="button" data-virtual-action="create">가상 포트폴리오 만들기</button></div>
                     <div class="code" style="margin-top:6px">통합 추천은 AI와 테마 양쪽에서 모두 추천된 종목 → 나머지 AI 추천 → 테마 종목(근거 점수 순)으로 최대 5종목을 고릅니다. 종료일 기본값은 다음 화요일(${escapeHtml(defaults.next_tuesday)})이고, 미장은 만들 때 환율로 달러로 바꿉니다.</div><div id="vp-message"></div>`;
                 await loadPortfolios();
             } catch (error) { form.innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`; }
@@ -1286,29 +1289,50 @@ MARKET_TREND_PAGE = """<!doctype html>
             const best = ready.length ? ready.reduce((top, item) => item.return > top.return ? item : top) : null;
             const rows = items.map(item => `<tr><td>${escapeHtml(label[item.source] || item.source)}${best && best.id === item.id ? ' <span class="chip pos">가장 좋음</span>' : ""}</td><td>${item.picks.length}종목</td><td>${item.status === "pending" ? "체결 대기" : money(item.value)}</td><td class="${pctClass(item.return)}">${item.status === "pending" ? "-" : pct(item.return)}</td><td class="${pctClass(item.return - (item.index_return ?? 0))}">${item.status === "pending" || item.index_return === null || item.index_return === undefined ? "-" : `${item.return - item.index_return > 0 ? "+" : ""}${((item.return - item.index_return) * 100).toFixed(2)}%p`}</td></tr>`).join("");
             const index = ready[0] ? `<tr><td>같은 돈을 ${escapeHtml(ready[0].index_name)}에</td><td>-</td><td>${money(ready[0].index_value)}</td><td class="${pctClass(ready[0].index_return)}">${pct(ready[0].index_return)}</td><td>-</td></tr>` : "";
-            return `<div class="briefing-card" style="margin-top:10px"><h4>세 가지 비교 · ${escapeHtml(first.market === "KR" ? "국장" : "미장")} · ${escapeHtml(first.created_at)} 만듦 · ${escapeHtml(first.end_date)} 종가까지 · 각 ${money(first.capital)}</h4>
+            return `<div class="briefing-card" style="margin-top:10px"><h4>세 가지 비교 · ${escapeHtml(first.market === "KR" ? "국장" : "미장")} · ${escapeHtml(first.created_at)} 만듦 · ${first.open_ended ? "계속 운용 중" : `${escapeHtml(first.end_date)} 종가까지`} · 각 ${money(first.capital)}</h4>
                 <div class="table-wrap"><table class="sim-table"><thead><tr><th>추천 방식</th><th>종목 수</th><th>평가액</th><th>수익률</th><th>지수 대비</th></tr></thead><tbody>${rows}${index}</tbody></table></div></div>`;
+        }
+        function clip(text, size = 40) {
+            const value = String(text || "");
+            return value.length > size ? `${value.slice(0, size)}…` : value;
         }
         function portfolioCard(portfolio, fxNow) {
             const usd = portfolio.currency === "USD";
             const money = value => value === null || value === undefined ? "-" : usd ? `${moneyText(value, "USD")}${fxNow ? ` (약 ${manwon(value * fxNow)})` : ""}` : manwon(value);
             const status = { pending: ["체결 대기", ""], active: [portfolio.live ? "진행 중 · 장중" : "진행 중", "pos"], finished: ["종료", "neg"] }[portfolio.status] || [portfolio.status, ""];
             const sourceLabel = { all: "통합 추천", ai: "AI 추천 종목만", theme: "추천 테마 종목만" }[portfolio.source] || portfolio.source;
-            const head = `<div class="chip-row"><strong style="font-size:15px">${escapeHtml(portfolio.name || sourceLabel)}</strong><span class="chip ${status[1]}">${status[0]}</span><span class="code">${escapeHtml(portfolio.market === "KR" ? "국장" : "미장")} · ${escapeHtml(sourceLabel)} · ${escapeHtml(portfolio.created_at)} 만듦 · ${escapeHtml(portfolio.end_date)} 종가까지 · ${money(portfolio.capital)}</span></div>
+            const head = `<div class="chip-row"><strong style="font-size:15px">${escapeHtml(portfolio.name || sourceLabel)}</strong><span class="chip ${status[1]}">${status[0]}</span><span class="code">${escapeHtml(portfolio.market === "KR" ? "국장" : "미장")} · ${escapeHtml(sourceLabel)} · ${escapeHtml(portfolio.created_at)} 만듦 · ${portfolio.open_ended ? "종료일 없이 계속 운용 중" : `${escapeHtml(portfolio.end_date)} 종가까지`}${portfolio.original_end_date && (portfolio.open_ended || portfolio.original_end_date !== portfolio.end_date) ? ` (처음 종료일 ${escapeHtml(portfolio.original_end_date)})` : ""} · ${money(portfolio.capital)}</span>${portfolio.managed ? `<span class="chip pos">자동 운용${portfolio.managed.rotate ? " · 새 추천 교체" : ""}</span>` : ""}</div>
                 <div class="chip-row" style="margin:6px 0"><span class="rename-box" data-id="${escapeHtml(portfolio.id)}" hidden><input maxlength="40" value="${escapeHtml(portfolio.name || "")}" aria-label="새 이름" style="width:180px"><button type="button" class="ghost" data-virtual-action="rename-save" data-id="${escapeHtml(portfolio.id)}">저장</button></span>
                 <button type="button" class="ghost" data-virtual-action="rename" data-id="${escapeHtml(portfolio.id)}">이름 바꾸기</button>
-                <button type="button" class="ghost" data-virtual-action="duplicate" data-id="${escapeHtml(portfolio.id)}" data-market="${escapeHtml(portfolio.market.toLowerCase())}" data-capital="${escapeHtml(String(portfolio.capital_krw))}" data-source="${escapeHtml(portfolio.source)}" data-end="${escapeHtml(portfolio.end_date)}" data-name="${escapeHtml(portfolio.name || "")}" title="시장·금액·방식·종료일이 같은 포트폴리오를 오늘 추천대로 하나 더 만듭니다">같은 설정으로 하나 더</button>
+                <span class="end-box" data-id="${escapeHtml(portfolio.id)}" hidden><input type="date" value="${escapeHtml(portfolio.end_date)}" min="${escapeHtml(portfolio.created_date)}" aria-label="새 종료일"><button type="button" class="ghost" data-virtual-action="end-today" data-id="${escapeHtml(portfolio.id)}" title="오늘 종가(장중이면 지금 가격)까지 들고 있었다면">오늘까지</button><button type="button" class="ghost" data-virtual-action="end-save" data-id="${escapeHtml(portfolio.id)}">저장</button>${portfolio.group ? '<span class="code">세 가지 비교 묶음은 함께 바뀝니다</span>' : ""}</span>
+                <button type="button" class="ghost" data-virtual-action="end" data-id="${escapeHtml(portfolio.id)}" title="만든 뒤에 종료일을 늘리거나 줄여, 그때까지 들고 있었다면 어땠는지 봅니다">${portfolio.open_ended ? "운용 끝내기(종료일 정하기)" : "종료일 바꾸기"}</button>
+                ${portfolio.managed
+                    ? `<button type="button" class="ghost" data-virtual-action="managed-off" data-id="${escapeHtml(portfolio.id)}" title="처음 산 종목 그대로, 정한 종료일까지 보는 원래 방식으로 돌아갑니다">자동 운용 끄기</button>`
+                    : `<span class="managed-box" data-id="${escapeHtml(portfolio.id)}" hidden><label class="code"><input type="checkbox" class="managed-rotate"> 새 추천이 나오면 빠진 종목 교체</label><button type="button" class="ghost" data-virtual-action="managed-on" data-id="${escapeHtml(portfolio.id)}">켜기</button>${portfolio.group ? '<span class="code">세 가지 비교 묶음은 함께 켜집니다</span>' : ""}</span><button type="button" class="ghost" data-virtual-action="managed" data-id="${escapeHtml(portfolio.id)}" title="만든 날부터 이 규칙이었다면으로 다시 계산하고, 종료일 없이 계속 이어 갑니다">자동 운용 켜기</button>`}
+                <button type="button" class="ghost" data-virtual-action="duplicate" data-id="${escapeHtml(portfolio.id)}" data-market="${escapeHtml(portfolio.market.toLowerCase())}" data-capital="${escapeHtml(String(portfolio.capital_krw))}" data-source="${escapeHtml(portfolio.source)}" data-end="${escapeHtml(portfolio.end_date)}" data-name="${escapeHtml(portfolio.name || "")}" data-managed="${portfolio.managed ? "1" : ""}" data-rotate="${portfolio.managed?.rotate ? "1" : ""}" title="시장·금액·방식·종료일이 같은 포트폴리오를 오늘 추천대로 하나 더 만듭니다">같은 설정으로 하나 더</button>
                 <button type="button" class="ghost" data-virtual-action="delete" data-id="${escapeHtml(portfolio.id)}">삭제</button></div>`;
             const viaText = pick => (pick.via || []).map(via => via === "ai" ? "AI" : "테마").join("·");
             const rules = portfolio.rules;
-            const ruleLine = rules ? `<p class="code" style="margin:4px 0">적용 규칙: 변동성 반비례 비중(한 종목 최대 25%)${rules.filtered ? " · 5거래일 이하 보유라 단기 과열·근거 약한 종목 제외" : ""}${rules.weak_market ? ` · 만든 날 지수가 60일 평균선 아래(약세장)라 ${Math.round((rules.invest_fraction || 0.5) * 100)}%만 투자하고 나머지는 현금` : ""} · ${rules.auto_sell ? "매도 신호(고점 대비 −10%)가 나면 판 것으로 처리" : "매도 신호는 표시만"}${(portfolio.excluded || []).length ? ` · 제외: ${portfolio.excluded.map(item => `${escapeHtml(item.name)}(${escapeHtml(item.reason)})`).join(", ")}` : ""}</p>`
-                : '<p class="code" style="margin:4px 0">예전 방식으로 만든 포트폴리오(같은 금액, 자동 매도 없음) · 매도 신호는 표시만 합니다.</p>';
+            const managedLine = portfolio.managed ? `<p class="code" style="margin:4px 0">자동 운용(판단 모듈): 서버가 장중 5분마다 확인합니다.
+                <br>· 팔기: 고점 대비 −${Math.round(((rules && rules.trail) || 0.1) * 100)}%(산 뒤 +5% 넘게 오른 뒤, 약세장 −7%) · 위험 종목 지정 · 하루 한 번 AI 점검의 매도 의견은 장중 언제든, 추천에서 빠지고 20일선 아래로 무너짐 · 테마 흐름 하락 전환 · 이익 실현(+25%·RSI 80)은 마감 무렵에만
+                <br>· 사기: 판 돈으로 다음 확인 때 가장 최근 AI분석 추천(${escapeHtml(sourceLabel)}) 중에서 위험 지정·단기 과열·근거 50점 미만(약세장 60점)·하락 흐름 테마는 빼고 근거 점수·AI 추천·20일선·RSI로 순서를 매겨 삽니다. 약세장(지수 60일선 아래)이면 절반만 사고 나머지는 시장이 회복될 때까지 남겨 둡니다(방금 판 종목은 다음 추천까지 제외)${portfolio.reserve_cash ? ` · 약세장이라 남겨 둔 돈 ${money(portfolio.reserve_cash)}` : ""}${portfolio.intraday ? `${portfolio.ledger_updated_at ? ` · 마지막 확인 ${escapeHtml(portfolio.ledger_updated_at)}` : ""}` : " · 자동 운용을 켜기 전 기간은 일봉으로 계산(시가 매수·종가 매도)"}${portfolio.managed.rotate ? (portfolio.requested_count ? " · 새 추천이 나오면 추천 상위에서 빠진 종목은 시가에 팔고 새 추천으로 교체" : " · 새 추천이 나오면 추천에서 빠진 종목은 시가에 팔고, 그 돈을 새 추천 종목(개수는 AI가 고른 대로)에 똑같이 나눠 삼") : ""} · 판 돈만 다시 투자하고 처음 남긴 현금은 그대로${portfolio.used_snapshot ? ` · 지금 쓰는 추천: ${escapeHtml(portfolio.used_snapshot)}` : ""}${portfolio.waiting_cash ? ` · 살 추천 종목이 없어 기다리는 돈 ${money(portfolio.waiting_cash)}` : ""}</p>` : "";
+            const ruleLine = managedLine + (rules ?`<p class="code" style="margin:4px 0">적용 규칙: 변동성 반비례 비중(한 종목 최대 25%)${rules.filtered ? " · 5거래일 이하 보유라 단기 과열·근거 약한 종목 제외" : ""}${rules.weak_market ? ` · 만든 날 지수가 60일 평균선 아래(약세장)라 ${Math.round((rules.invest_fraction || 0.5) * 100)}%만 투자하고 나머지는 현금` : ""} · ${rules.auto_sell ? "매도 신호(고점 대비 −10%)가 나면 판 것으로 처리" : "매도 신호는 표시만"}${(portfolio.excluded || []).length ? ` · 제외: ${portfolio.excluded.map(item => `${escapeHtml(item.name)}(${escapeHtml(item.reason)})`).join(", ")}` : ""}</p>`
+                : `<p class="code" style="margin:4px 0">예전 방식으로 만든 포트폴리오(처음 종목은 같은 금액${portfolio.managed ? ")" : ", 자동 매도 없음) · 매도 신호는 표시만 합니다"}.</p>`);
+            const actionLabel = trade => trade.action === "buy" ? '<span class="chip pos">매수</span>' : '<span class="chip neg">매도</span>';
+            const tradeRows = (portfolio.trades || []).slice().reverse().map(trade => `<tr><td>${escapeHtml(trade.time || trade.date)}</td><td>${actionLabel(trade)}</td><td>${escapeHtml(trade.name)} <span class="code">${escapeHtml(trade.symbol)}</span></td><td>${trade.shares.toLocaleString("ko-KR")}주</td><td>${moneyText(trade.price, portfolio.currency)}</td><td class="code">${escapeHtml(trade.reason)}</td><td class="${pctClass(trade.return)}">${trade.return === undefined ? "-" : pct(trade.return)}</td></tr>`).join("");
+            const plan = portfolio.managed ? portfolio.plan : null;
+            const planRows = plan ? (plan.orders || []).map(order => `<tr><td>${order.action === "buy" ? '<span class="chip pos">매수</span>' : '<span class="chip neg">매도</span>'}</td><td>${escapeHtml(order.name)} <span class="code">${escapeHtml(order.symbol)}</span></td><td>${Number(order.shares).toLocaleString("ko-KR")}주(예상)</td><td>${moneyText(order.ref_price, portfolio.currency)}</td><td class="code">${order.action === "buy" ? `시가 ${moneyText(order.limit, portfolio.currency)} 이하면 매수` : "시가에 매도"}</td><td class="code">${escapeHtml(order.reason)}</td></tr>`).join("") : "";
+            const planBox = plan ? `<div class="briefing-card" style="margin:8px 0;padding:10px"><strong>${plan.executed ? `예약 주문 · ${escapeHtml(plan.for_day)} 시가 · ${escapeHtml(plan.executed_at || "")} 체결` : `다음 장 예약 주문 · ${escapeHtml(plan.for_day)} 시가`}</strong>
+                <span class="code"> · ${escapeHtml(plan.created_at || "")}에 ${plan.based_on ? `추천(${escapeHtml(plan.based_on)})과 ` : ""}AI 점검·시장 상황으로 정함 · 매수는 시가가 전날 종가보다 +3% 넘게 높으면 건너뜀</span>
+                ${planRows ? `<div class="table-wrap"><table class="sim-table"><thead><tr><th>구분</th><th>종목</th><th>수량</th><th>전날 종가</th><th>조건</th><th>이유</th></tr></thead><tbody>${planRows}</tbody></table></div>` : '<p class="code" style="margin:4px 0">바꿀 종목이 없어 예약 주문이 없습니다(지금 보유 그대로).</p>'}
+                ${(plan.skipped || []).length ? `<p class="code" style="margin:4px 0">건너뜀: ${plan.skipped.map(item => `${escapeHtml(item.name)}(${escapeHtml(item.reason)})`).join(", ")}</p>` : ""}</div>` : "";
+            const tradeTable = portfolio.managed && tradeRows ? `<details style="margin-top:8px"><summary style="cursor:pointer">매매 내역 ${portfolio.trades.length}건 <span class="code">언제·무엇을·왜 사고팔았는지(최근 순)</span></summary><div class="table-wrap"><table class="sim-table"><thead><tr><th>날짜·시각</th><th>구분</th><th>종목</th><th>수량</th><th>가격</th><th>이유</th><th>수익률</th></tr></thead><tbody>${tradeRows}</tbody></table></div></details>` : "";
             if (portfolio.status === "pending") {
                 return `<div class="briefing-card" id="vp-${escapeHtml(portfolio.id)}" style="margin-top:10px">${head}${ruleLine}<p class="briefing-summary">투자 금액 ${money(portfolio.capital)} · ${escapeHtml(portfolio.message || "")}</p><div class="chip-row">${portfolio.picks.map(pick => `<span class="chip">${escapeHtml(pick.name)}${pick.via?.length ? ` <span class="code">${viaText(pick)}</span>` : ""}</span>`).join("")}</div></div>`;
             }
             const beat = portfolio.index_return !== null && portfolio.index_return !== undefined ? portfolio.return - portfolio.index_return : null;
             const holdings = portfolio.holdings.map(holding => ["bought", "sold"].includes(holding.status)
-                ? `<tr><td>${escapeHtml(holding.name)} <span class="code">${escapeHtml(holding.symbol)}${holding.via?.length ? ` · ${viaText(holding)}` : ""}${holding.weight !== undefined ? ` · 비중 ${Math.round(holding.weight * 100)}%` : ""}</span>${signalList(holding.signal)}</td><td>${holding.shares.toLocaleString("ko-KR")}주</td><td>${escapeHtml(holding.buy_date)} ${moneyText(holding.buy_price, portfolio.currency)}</td><td>${moneyText(holding.last_price, portfolio.currency)}${holding.status === "sold" ? ` <span class="chip neg">${escapeHtml(holding.sold_date)} 매도(${escapeHtml(holding.exit_reason)})</span>` : ""}</td><td class="${pctClass(holding.return)}">${pct(holding.return)}</td><td class="${pctClass(holding.profit)}">${usd ? moneyText(holding.profit, "USD") : signedManwon(holding.profit)}</td><td>${holding.status === "sold" ? '<span class="chip">판매 완료</span>' : signalChip(holding.signal)}</td></tr>`
+                ? `<tr><td>${escapeHtml(holding.name)} <span class="code">${escapeHtml(holding.symbol)}${holding.via?.length ? ` · ${viaText(holding)}` : ""}${holding.weight !== undefined ? ` · 비중 ${Math.round(holding.weight * 100)}%` : ""}</span>${holding.buy_reason && holding.buy_reason !== "처음 매수" ? `<span class="reason-line" title="${escapeHtml(holding.buy_reason)}">산 이유: ${escapeHtml(clip(holding.buy_reason, 60))}</span>` : ""}${signalList(holding.signal)}</td><td>${holding.shares.toLocaleString("ko-KR")}주</td><td>${escapeHtml(holding.buy_time || holding.buy_date)} ${moneyText(holding.buy_price, portfolio.currency)}</td><td>${moneyText(holding.last_price, portfolio.currency)}${holding.status === "sold" ? ` <span class="chip neg">${escapeHtml((holding.sold_time || holding.sold_date).slice(5))} 매도</span><span class="reason-line" title="${escapeHtml(holding.exit_reason || "")}" style="margin-left:auto">${escapeHtml(clip(holding.exit_reason || "", 60))}</span>` : ""}</td><td class="${pctClass(holding.return)}">${pct(holding.return)}</td><td class="${pctClass(holding.profit)}">${usd ? moneyText(holding.profit, "USD") : signedManwon(holding.profit)}</td><td>${holding.status === "sold" ? '<span class="chip">판매 완료</span>' : signalChip(holding.signal)}</td></tr>`
                 : `<tr><td>${escapeHtml(holding.name)}</td><td colspan="6" class="code">${holding.status === "too_expensive" ? "1주 값이 배정 금액보다 비싸 사지 못함" : "체결 대기"}</td></tr>`).join("");
             const signalNote = portfolio.signal_counts && (portfolio.signal_counts.sell || portfolio.signal_counts.watch) && portfolio.status !== "finished"
                 ? `<div class="sim-verdict ${portfolio.signal_counts.sell ? "bad" : "mixed"}">매도 신호: 매도 고려 ${portfolio.signal_counts.sell}종목 · 주의 ${portfolio.signal_counts.watch}종목 — 아래 종목 표의 근거를 확인하세요.</div>` : "";
@@ -1321,6 +1345,8 @@ MARKET_TREND_PAGE = """<!doctype html>
                 </div>
                 ${equityChart(portfolio.series, [["value", "#d33d4d", false, "내 가상 포트폴리오"], ["index_value", "#2672c8", true, portfolio.index_name]])}
                 <div class="table-wrap"><table class="sim-table"><thead><tr><th>종목</th><th>수량</th><th>매수(시가)</th><th>현재가</th><th>수익률</th><th>손익</th><th>매도 신호</th></tr></thead><tbody>${holdings}</tbody></table></div>
+                ${planBox}
+                ${tradeTable}
                 <p class="code" style="margin-top:6px">평가액은 지금 팔면 받을 금액(매도 비용 ${(0.15).toFixed(2)}% 차감)입니다.</p></div>`;
         }
         function renderVirtualBacktest(root, data) {
@@ -1373,6 +1399,8 @@ MARKET_TREND_PAGE = """<!doctype html>
                         source: document.getElementById("vp-source").value, end_date: document.getElementById("vp-end").value || null,
                         name: document.getElementById("vp-name").value.trim() || null,
                         auto_sell: document.getElementById("vp-autosell").checked,
+                        managed: document.getElementById("vp-managed").checked,
+                        rotate: document.getElementById("vp-managed").checked && document.getElementById("vp-rotate").checked,
                     });
                     message.innerHTML = "";
                     document.getElementById("vp-name").value = "";
@@ -1391,6 +1419,35 @@ MARKET_TREND_PAGE = """<!doctype html>
                     await sendJson(`/api/v1/virtual/portfolios/${encodeURIComponent(button.dataset.id)}`, { name: box.querySelector("input").value.trim() }, "PATCH");
                     await loadPortfolios();
                 } catch (error) { box.insertAdjacentHTML("beforeend", ` <span class="error">${escapeHtml(error.message)}</span>`); }
+            } else if (action === "managed") {
+                const box = document.querySelector(`.managed-box[data-id="${button.dataset.id}"]`);
+                box.hidden = !box.hidden;
+            } else if (action === "managed-on" || action === "managed-off") {
+                const box = document.querySelector(`.managed-box[data-id="${button.dataset.id}"]`);
+                button.disabled = true;
+                try {
+                    await sendJson(`/api/v1/virtual/portfolios/${encodeURIComponent(button.dataset.id)}`,
+                        { managed: action === "managed-on", rotate: Boolean(box?.querySelector(".managed-rotate")?.checked) }, "PATCH");
+                    await loadPortfolios();
+                } catch (error) {
+                    button.disabled = false;
+                    button.insertAdjacentHTML("afterend", ` <span class="error">${escapeHtml(error.message)}</span>`);
+                }
+            } else if (action === "end") {
+                const box = document.querySelector(`.end-box[data-id="${button.dataset.id}"]`);
+                box.hidden = !box.hidden;
+            } else if (action === "end-today" || action === "end-save") {
+                const box = document.querySelector(`.end-box[data-id="${button.dataset.id}"]`);
+                const input = box.querySelector("input");
+                if (action === "end-today") {
+                    const now = new Date(Date.now() + 9 * 3600 * 1000);  // 한국 날짜
+                    input.value = now.toISOString().slice(0, 10);
+                }
+                box.querySelector(".error")?.remove();
+                try {
+                    await sendJson(`/api/v1/virtual/portfolios/${encodeURIComponent(button.dataset.id)}`, { end_date: input.value }, "PATCH");
+                    await loadPortfolios();
+                } catch (error) { box.insertAdjacentHTML("beforeend", ` <span class="error">${escapeHtml(error.message)}</span>`); }
             } else if (action === "duplicate") {
                 button.disabled = true;
                 button.textContent = "만드는 중…";
@@ -1398,6 +1455,7 @@ MARKET_TREND_PAGE = """<!doctype html>
                     await sendJson("/api/v1/virtual/portfolios", {
                         market: button.dataset.market, capital_krw: Number(button.dataset.capital), source: button.dataset.source,
                         end_date: button.dataset.end, name: button.dataset.name || null,
+                        managed: button.dataset.managed === "1", rotate: button.dataset.rotate === "1",
                     });
                     await loadPortfolios();
                 } catch (error) {

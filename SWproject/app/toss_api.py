@@ -233,26 +233,8 @@ class TossApiClient:
         if not unique_symbols:
             return {}
 
-        token = await self.token_manager.get_access_token()
-        params = {"symbols": ",".join(unique_symbols)}
-        response = await self.client.get(
-            self.settings.toss_stocks_path,
-            params=params,
-            headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
-        )
-        if response.status_code == 401:
-            self.token_manager._access_token = None
-            token = await self.token_manager.get_access_token()
-            response = await self.client.get(
-                self.settings.toss_stocks_path,
-                params=params,
-                headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
-            )
-        if response.is_error:
-            raise TossApiError(f"Toss stock info {response.status_code}: {response.text[:500]}")
-
-        payload = response.json()
-        result = payload.get("result", [])
+        # 401은 토큰 재발급, 429(호출 한도)는 Retry-After만큼 기다렸다가 다시(장중 추천 갱신·자동 운용 확인이 겹칠 때)
+        result = await self._get_result(self.settings.toss_stocks_path, {"symbols": ",".join(unique_symbols)}) or []
         stocks = result if isinstance(result, list) else result.get("stocks", [])
         return {
             stock.get("symbol"): stock

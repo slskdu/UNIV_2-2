@@ -1,4 +1,5 @@
 """시장 인사이트 순수 로직 회귀 테스트. 실행: py -m unittest discover -s tests"""
+import math
 import os
 import unittest
 from datetime import date, timedelta
@@ -935,6 +936,22 @@ class SignalsTest(unittest.TestCase):
         volume = next(factor for factor in technical_factors(_candles(falling, volumes=volumes)) if factor["key"] == "volume")
         self.assertEqual(volume["signal"], -1)
 
+    def test_us_pressure_is_reference_only(self):
+        from app.signals import compute_signals, pressure_factor
+
+        closes = [100.0 + (index % 2) * 0.5 for index in range(40)] + [101 + index for index in range(20)]
+        volumes = [1000.0] * 60
+        buying = pressure_factor(_candles(closes, volumes=volumes))
+        self.assertEqual((buying["signal"], buying["weight"], buying["reference"]), (1, 0.0, True))
+        falling = pressure_factor(_candles([200.0 - index for index in range(60)], volumes=volumes))
+        self.assertEqual(falling["signal"], -1)
+        plain = compute_signals(_candles(closes, volumes=volumes))
+        with_pressure = compute_signals(_candles(closes, volumes=volumes), pressure=True)
+        self.assertEqual(plain["score"], with_pressure["score"])  # 점수에는 영향 없음
+        self.assertIn("pressure", [factor["key"] for factor in with_pressure["factors"]])
+        self.assertFalse(any("압력" in text for text in with_pressure["positives"]))  # AI 입력용 긍정 목록에도 넣지 않음
+        self.assertIsNone(pressure_factor(_candles([100.0] * 10)))
+
     def test_market_is_weak(self):
         from app.simulation import market_is_weak
 
@@ -1334,6 +1351,340 @@ class PortfolioRuleTest(unittest.IsolatedAsyncioTestCase):
         self.assertGreater(weights["OK1"], weights["HOT"])  # 변동성이 작은 쪽이 더 많이
         self.assertFalse(long["rules"]["filtered"])
         self.assertAlmostEqual(sum(pick["weight"] for pick in long["picks"]), 1, places=3)
+
+    def test_managed_sells_on_signal_and_buys_latest_pick(self):
+        from app.managed import simulate_managed
+
+        def bars(closes, start=2):
+            return [{"date": f"2026-11-{day:02d}", "open": close, "close": close} for day, close in zip(range(start, start + len(closes)), closes)]
+
+        portfolio = {"id": "p", "market": "KR", "source": "ai", "created_date": "2026-11-01", "capital": 1_000_000,
+                     "picks": [{"symbol": "A", "name": "에이", "weight": 0.5}, {"symbol": "B", "name": "비", "weight": 0.5}]}
+        index = bars([100] * 6)
+        snapshots = [{"date": "2026-11-03", "generated_at": "2026-11-03 18:00",
+                      "items": [{"symbol": "A", "name": "에이", "kind": "ai_pick"}, {"symbol": "C", "name": "씨", "kind": "ai_pick"}]}]
+        prices = {"A": bars([100, 120, 105, 100, 100, 100]), "B": bars([100] * 6)}
+        need = simulate_managed(portfolio, prices, index, snapshots, "2026-11-07", 0.0, 0.10, 0.05)
+        self.assertEqual(need, {"missing": ["C"]})  # 새로 살 종목 가격이 없으면 달라고 함
+        prices["C"] = bars([50, 50, 50, 60, 60, 66])
+        run = simulate_managed(portfolio, prices, index, snapshots, "2026-11-07", 0.0, 0.10, 0.05)
+        actions = [(trade["date"], trade["action"], trade["symbol"]) for trade in run["trades"]]
+        # A: 120 → 105(−12.5%)인 11-04 종가에 팔고, 11-05 시가에 11-03 추천 중 안 가진 C를 판 돈으로 삼(A는 방금 팔아 제외)
+        self.assertIn(("2026-11-04", "sell", "A"), actions)
+        self.assertIn(("2026-11-05", "buy", "C"), actions)
+        held = {holding["symbol"]: holding for holding in run["holdings"]}
+        self.assertEqual(set(held), {"B", "C"})
+        self.assertEqual(held["C"]["shares"], math.floor(500_000 * 1.05 / 60))  # 판 돈(50만원 × 105/100)으로
+        self.assertAlmostEqual(run["series"][-1]["value"], run["cash"] + 5_000 * 100 + held["C"]["shares"] * 66, places=2)
+        self.assertEqual(run["closed"][0]["exit_reason"], "고점 대비 −10%")
+
+    def test_managed_rotate_replaces_dropped_holdings(self):
+        from app.managed import simulate_managed
+
+        def bars(closes):
+            return [{"date": f"2026-11-{day:02d}", "open": close, "close": close} for day, close in zip(range(2, 2 + len(closes)), closes)]
+
+        portfolio = {"id": "p", "market": "KR", "source": "all", "created_date": "2026-11-01", "capital": 1_000_000,
+                     "picks": [{"symbol": "A", "name": "에이"}, {"symbol": "B", "name": "비"}]}
+        snapshots = [{"date": "2026-11-01", "generated_at": "2026-11-01 18:00", "items": [{"symbol": "A", "name": "에이", "kind": "combined"}]},
+                     {"date": "2026-11-03", "generated_at": "2026-11-03 18:00",
+                      "items": [{"symbol": "A", "name": "에이", "kind": "combined"}, {"symbol": "D", "name": "디", "kind": "combined"}]}]
+        prices = {symbol: bars([100] * 5) for symbol in ("A", "B", "D")}
+        kept = simulate_managed(portfolio, prices, bars([100] * 5), snapshots, "2026-11-06", 0.0, 0.10, 0.05)
+        self.assertEqual({holding["symbol"] for holding in kept["holdings"]}, {"A", "B"})  # 교체를 안 켜면 그대로
+        run = simulate_managed(portfolio, prices, bars([100] * 5), snapshots, "2026-11-06", 0.0, 0.10, 0.05, rotate=True)
+        self.assertEqual({holding["symbol"] for holding in run["holdings"]}, {"A", "D"})
+        sold = run["closed"][0]
+        self.assertEqual((sold["symbol"], sold["sold_date"]), ("B", "2026-11-04"))  # 11-03 저녁 추천 → 다음 날 시가에 교체
+        self.assertIn("새 추천에서 빠짐", sold["exit_reason"])
+        empty = snapshots + [{"date": "2026-11-04", "generated_at": "2026-11-04 18:00", "items": []}]
+        same = simulate_managed(portfolio, prices, bars([100] * 5), empty, "2026-11-06", 0.0, 0.10, 0.05, rotate=True)
+        self.assertEqual({holding["symbol"] for holding in same["holdings"]}, {"A", "D"})  # 빈 추천 기록으로 전부 팔지 않음
+        # 추천이 고른 수를 따름: 새 추천이 3종목(A·E·F)이면 빠진 B를 팔고 그 돈을 E·F에 반씩
+        wide = [snapshots[0], {"date": "2026-11-03", "generated_at": "2026-11-03 18:00", "items": [
+            {"symbol": symbol, "name": symbol, "kind": "ai_pick"} for symbol in ("A", "E", "F")]}]
+        prices.update({"E": bars([100] * 5), "F": bars([100] * 5)})
+        grown = simulate_managed({**portfolio, "source": "ai"}, prices, bars([100] * 5), wide, "2026-11-06", 0.0, 0.10, 0.05, rotate=True)
+        self.assertEqual({holding["symbol"]: holding["shares"] for holding in grown["holdings"]}, {"A": 5000, "E": 2500, "F": 2500})
+        fixed = simulate_managed({**portfolio, "source": "ai", "requested_count": 2}, prices, bars([100] * 5), wide, "2026-11-06", 0.0, 0.10, 0.05, rotate=True)
+        self.assertEqual(len(fixed["holdings"]), 2)  # 수를 정했으면 그 수 유지
+
+    def test_live_tick_trades_intraday(self):
+        from app.managed import live_tick, needed_symbols
+
+        portfolio = {"id": "p", "market": "KR", "source": "ai", "created_date": "2026-11-24", "capital": 1_000_000,
+                     "picks": [{"symbol": "A", "name": "에이", "weight": 0.5}, {"symbol": "B", "name": "비", "weight": 0.5}]}
+        snapshots = [{"date": "2026-11-24", "generated_at": "2026-11-24 16:00",
+                      "items": [{"symbol": "A", "name": "에이", "kind": "ai_pick"}, {"symbol": "C", "name": "씨", "kind": "ai_pick"}]}]
+        args = (0.0, 0.10, 0.05, False)
+        # 처음 확인(장중 09:05): 지금 가격으로 처음 종목을 삼
+        state = live_tick({}, portfolio, {"A": 100, "B": 50}, snapshots, "2026-11-25", "2026-11-25 09:05", *args)
+        self.assertEqual({symbol: item["shares"] for symbol, item in state["held"].items()}, {"A": 5000, "B": 10000})
+        self.assertEqual(state["trades"][0]["time"], "2026-11-25 09:05")
+        self.assertEqual(set(needed_symbols(state, portfolio, snapshots, "2026-11-25 09:10")), {"A", "B", "C"})
+        # 장중에 A가 120까지 올랐다가 107(−10.8%)로 → 그 시점 가격에 팜
+        state = live_tick(state, portfolio, {"A": 120, "B": 50, "C": 40}, snapshots, "2026-11-25", "2026-11-25 10:00", *args)
+        state = live_tick(state, portfolio, {"A": 107, "B": 50, "C": 40}, snapshots, "2026-11-25", "2026-11-25 10:05", *args)
+        self.assertNotIn("A", state["held"])
+        self.assertEqual(state["closed"][-1]["sold_time"], "2026-11-25 10:05")
+        self.assertEqual(state["pending"], [535_000])
+        # 다음 확인(5분 뒤)에 판 돈으로 추천 중 안 가진 C를 지금 가격에 삼(방금 판 A는 제외)
+        state = live_tick(state, portfolio, {"A": 107, "B": 50, "C": 40}, snapshots, "2026-11-25", "2026-11-25 10:10", *args)
+        self.assertEqual(state["held"]["C"]["shares"], 13_375)
+        self.assertEqual(state["pending"], [])
+        self.assertEqual([point["date"] for point in state["series"]], ["2026-11-25"])  # 같은 날은 평가액 한 점을 덮어씀
+
+    def test_decision_rank_buys_uses_market_and_recommendation(self):
+        from app.decision import Context, rank_buys
+
+        snapshot = {"items": [
+            {"symbol": "GOOD", "name": "좋음", "kind": "ai_pick", "evidence": 70, "theme": "여행"},
+            {"symbol": "OK", "name": "보통", "kind": "pick", "evidence": 58, "theme": "여행"},
+            {"symbol": "LOW", "name": "약함", "kind": "pick", "evidence": 45, "theme": "여행"},
+            {"symbol": "RISKY", "name": "위험", "kind": "ai_pick", "evidence": 80, "theme": "여행"},
+            {"symbol": "RISKY", "name": "위험", "kind": "ai_risk", "evidence": 80, "theme": "여행"},
+            {"symbol": "FALL", "name": "하락테마", "kind": "pick", "evidence": 75, "theme": "전자부품"},
+            {"symbol": "HOT", "name": "과열", "kind": "pick", "evidence": 75, "theme": "여행"},
+        ]}
+        options = [(item["symbol"], item["name"]) for item in snapshot["items"]]
+        tech = {"HOT": {"r5": 0.25, "r20": 0.1}, "OK": {"above_ma20": False}}
+        ctx = Context(flows={"전자부품": "하락 지속", "여행": "상승 지속"}, tech=lambda symbol: tech.get(symbol))
+        ranked = [symbol for symbol, _, _ in rank_buys(list(dict.fromkeys(options)), snapshot, ctx)]
+        self.assertEqual(ranked, ["GOOD", "OK"])  # 위험 지정·하락 테마·과열·근거 50 미만은 빼고, AI 추천 가산
+        weak = Context(weak_market=True, flows=ctx.flows, tech=ctx.tech)
+        self.assertEqual([symbol for symbol, _, _ in rank_buys(list(dict.fromkeys(options)), snapshot, weak)], ["GOOD"])  # 약세장은 60점 이상만
+
+    def test_decision_exit_reasons(self):
+        from app.decision import Context, exit_reason
+
+        item = {"symbol": "A", "buy_price": 100, "peak": 110, "theme": "여행"}
+        calm = Context(late=True, tech=lambda symbol: {"above_ma20": True, "r20": 0.02, "rsi": 55})
+        self.assertIsNone(exit_reason(item, 104, {"items": [{"symbol": "A", "kind": "pick"}]}, calm, 0.10, 0.05))
+        self.assertIn("약세장", exit_reason(item, 102, None, Context(weak_market=True), 0.10, 0.05))  # 110 → 102(−7.3%)
+        risk = {"items": [{"symbol": "A", "kind": "ai_risk"}]}
+        self.assertIn("위험 종목", exit_reason(item, 104, risk, Context(late=False), 0.10, 0.05))
+        reviewed = Context(late=False, review={"A": {"action": "sell", "reason": "근거 약화"}})
+        self.assertEqual(exit_reason(item, 104, None, reviewed, 0.10, 0.05), "AI 점검: 근거 약화")
+        broken = Context(late=True, tech=lambda symbol: {"above_ma20": False, "r20": -0.08, "rsi": 40})
+        self.assertIn("추천 근거 약화", exit_reason({**item, "peak": 100}, 95, {"items": []}, broken, 0.10, 0.05))
+        self.assertIsNone(exit_reason({**item, "peak": 100}, 95, {"items": []}, Context(late=False, tech=broken.tech), 0.10, 0.05))  # 장중엔 안 봄
+        falling = Context(late=True, flows={"여행": "하락 전환"}, tech=lambda symbol: {"above_ma20": False, "r20": 0.0})
+        self.assertIn("테마 흐름 하락", exit_reason({**item, "peak": 100}, 101, {"items": [{"symbol": "A", "kind": "pick"}]}, falling, 0.10, 0.05))
+        hot = Context(late=True, tech=lambda symbol: {"above_ma20": True, "r20": 0.3, "rsi": 85})
+        self.assertIn("이익 실현", exit_reason({**item, "peak": 130}, 130, {"items": [{"symbol": "A", "kind": "pick"}]}, hot, 0.10, 0.05))
+
+    def test_weak_market_buys_half_and_reinvests_later(self):
+        from app.decision import Context
+        from app.managed import live_tick
+
+        portfolio = {"id": "p", "market": "KR", "source": "ai", "created_date": "2026-11-24", "capital": 1_000_000,
+                     "picks": [{"symbol": "A", "name": "에이", "weight": 1.0}]}
+        snapshots = [{"date": "2026-11-24", "generated_at": "2026-11-24 16:00",
+                      "items": [{"symbol": "A", "name": "에이", "kind": "ai_pick", "evidence": 70},
+                                {"symbol": "C", "name": "씨", "kind": "ai_pick", "evidence": 70}]}]
+        args = (0.0, 0.10, 0.05, False)
+        state = live_tick({}, portfolio, {"A": 100, "C": 100}, snapshots, "2026-11-25", "2026-11-25 09:05", *args)
+        state = live_tick(state, portfolio, {"A": 120, "C": 100}, snapshots, "2026-11-25", "2026-11-25 09:10", *args)
+        weak = Context(weak_market=True)
+        state = live_tick(state, portfolio, {"A": 111, "C": 100}, snapshots, "2026-11-25", "2026-11-25 09:15", *args, ctx=weak)  # 약세장 −7.5%로 매도
+        self.assertNotIn("A", state["held"])
+        state = live_tick(state, portfolio, {"A": 111, "C": 100}, snapshots, "2026-11-25", "2026-11-25 09:20", *args, ctx=weak)
+        self.assertEqual(state["held"]["C"]["shares"], 5550)  # 판 돈 111만원의 절반만
+        self.assertAlmostEqual(state["reserve"], 555_000)
+        self.assertIn("근거 70점", state["held"]["C"]["buy_reason"])
+        state = live_tick(state, portfolio, {"A": 111, "C": 100, "D": 50}, [{**snapshots[0], "items": snapshots[0]["items"] + [
+            {"symbol": "D", "name": "디", "kind": "ai_pick", "evidence": 65}]}], "2026-11-26", "2026-11-26 09:05", *args, ctx=Context())
+        self.assertEqual(state["reserve"], 0)  # 시장이 회복되면 남겨 둔 돈으로 추천 종목을 삼
+        self.assertEqual(state["held"]["D"]["shares"], 11_100)
+
+    def test_intraday_refresh_changes_portfolio_gently(self):
+        from app.managed import live_tick
+
+        portfolio = {"id": "p", "market": "KR", "source": "all", "created_date": "2026-11-24", "capital": 1_000_000,
+                     "picks": [{"symbol": "A", "name": "A", "weight": 0.5}, {"symbol": "B", "name": "B", "weight": 0.5}]}
+        morning = {"date": "2026-11-25", "generated_at": "2026-11-25 08:00", "items": [
+            {"symbol": "A", "name": "A", "kind": "combined"}, {"symbol": "B", "name": "B", "kind": "combined"}]}
+        args = (0.0, 0.10, 0.05, True)
+        quotes = {"A": 100, "B": 100, "C": 100, "D": 100}
+        state = live_tick({}, portfolio, quotes, [morning], "2026-11-25", "2026-11-25 09:05", *args)
+        # 10:30 장중 갱신: B는 통합에서 빠졌지만 테마 후보(pick)에 남음 → 유지, A는 완전히 빠짐 → 팔고 새 추천 C를 삼
+        noon = {"date": "2026-11-25", "generated_at": "2026-11-25 10:30", "items": [
+            {"symbol": "C", "name": "C", "kind": "combined"}, {"symbol": "B", "name": "B", "kind": "pick"}]}
+        state = live_tick(state, portfolio, quotes, [morning, noon], "2026-11-25", "2026-11-25 10:35", *args)
+        self.assertEqual(set(state["held"]), {"B", "C"})
+        self.assertEqual(state["used_snapshot"], "2026-11-25 10:30")
+        # 장중에 매도 신호로 판 종목은 그날 다시 나온 추천에 있어도 다시 사지 않음
+        state = live_tick(state, portfolio, {**quotes, "C": 120}, [morning, noon], "2026-11-25", "2026-11-25 11:00", *args)
+        state = live_tick(state, portfolio, {**quotes, "C": 105}, [morning, noon], "2026-11-25", "2026-11-25 11:05", *args)
+        self.assertNotIn("C", state["held"])
+        later = {**noon, "generated_at": "2026-11-25 11:30", "items": noon["items"] + [{"symbol": "D", "name": "D", "kind": "combined"}]}
+        state = live_tick(state, portfolio, quotes, [morning, noon, later], "2026-11-25", "2026-11-25 11:35", *args)
+        self.assertNotIn("C", state["held"])
+        self.assertIn("D", state["held"])
+        # 예전 장부(날짜만 남김)는 같은 기록을 새 추천으로 보지 않음
+        legacy = {**state, "used_snapshot": "2026-11-25", "banned": ["C"]}
+        again = live_tick(legacy, portfolio, quotes, [later], "2026-11-25", "2026-11-25 11:40", *args)
+        self.assertEqual(again["banned"], ["C"])
+        self.assertEqual(again["used_snapshot"], "2026-11-25 11:30")
+
+    def test_review_sell_blocks_buy_and_refresh_timing(self):
+        from datetime import datetime
+
+        from app.api.insight_routes import intraday_refresh_due
+        from app.briefing import KST
+        from app.decision import Context, rank_buys
+
+        snapshot = {"items": [{"symbol": "JNJ", "name": "J", "kind": "ai_pick", "evidence": 70}]}
+        self.assertEqual(rank_buys([("JNJ", "J")], snapshot, Context(review={"JNJ": {"action": "sell"}})), [])
+        at = lambda text: datetime.fromisoformat(text).replace(tzinfo=KST)  # noqa: E731
+        self.assertFalse(intraday_refresh_due("kr", at("2026-11-25T09:10")))  # 장 시작 20분 안
+        self.assertTrue(intraday_refresh_due("kr", at("2026-11-25T09:25")))
+        self.assertFalse(intraday_refresh_due("kr", at("2026-11-25T16:00")))
+        self.assertTrue(intraday_refresh_due("us", at("2026-11-26T00:30")))  # 뉴욕 10:30
+
+    def test_preorder_plan_and_open_execution(self):
+        from datetime import datetime, time
+
+        from app.briefing import KST
+        from app.decision import Context
+        from app.managed import execute_plan, live_tick, next_session_day, plan_orders
+
+        portfolio = {"id": "p", "market": "KR", "source": "ai", "created_date": "2026-11-23", "capital": 1_000_000,
+                     "picks": [{"symbol": "A", "name": "A", "weight": 1.0}]}
+        snapshots = [{"date": "2026-11-24", "generated_at": "2026-11-24 08:00", "items": [{"symbol": "A", "name": "A", "kind": "ai_pick", "evidence": 70}]},
+                     {"date": "2026-11-25", "generated_at": "2026-11-25 15:45", "items": [
+                         {"symbol": "A", "name": "A", "kind": "ai_pick", "evidence": 70}, {"symbol": "C", "name": "C", "kind": "ai_pick", "evidence": 70}]}]
+        args = (0.0, 0.10, 0.05, False)
+        state = live_tick({}, portfolio, {"A": 100}, snapshots[:1], "2026-11-24", "2026-11-24 09:05", *args)
+        state = live_tick(state, portfolio, {"A": 120}, snapshots[:1], "2026-11-25", "2026-11-25 14:00", *args)
+        # 장 마감 뒤(종가 109): 고점 120 대비 −9.2%라 아직 아님 → AI 점검이 매도 의견 → A 예약 매도, 판 돈으로 C 예약 매수
+        ctx = Context(review={"A": {"action": "sell", "reason": "근거 약화"}})
+        plan = plan_orders(state, portfolio, {"A": 109, "C": 50}, snapshots, "2026-11-26", "2026-11-25 16:00", *args, ctx)
+        self.assertEqual([(order["action"], order["symbol"]) for order in plan["orders"]], [("sell", "A"), ("buy", "C")])
+        self.assertEqual(plan["orders"][1]["limit"], 51.5)
+        self.assertEqual(state["held"]["A"]["shares"], 10_000)  # 예약만, 장부는 그대로
+        state = {**state, "plan": plan}
+        # 다음 날 시가: A 108에 팔고, C가 52(전날 50 대비 +4%, 갭 상승)로 시작하면 사지 않고 그날은 쫓아 사지 않음
+        gap = execute_plan(state, portfolio, {"A": {"open": 108, "prev_close": 109}, "C": {"open": 52, "prev_close": 50}},
+                           snapshots, "2026-11-26", "2026-11-26 09:05", *args, Context())
+        self.assertNotIn("A", gap["held"])
+        self.assertNotIn("C", gap["held"])
+        self.assertIn("C", gap["banned"])
+        self.assertTrue(gap["plan"]["executed"])
+        self.assertEqual(gap["plan"]["skipped"][0]["symbol"], "C")
+        self.assertTrue(gap["trades"][-1]["reason"].startswith("예약(시가 매도)"))
+        calm = execute_plan(state, portfolio, {"A": {"open": 108, "prev_close": 109}, "C": {"open": 51, "prev_close": 50}},
+                            snapshots, "2026-11-26", "2026-11-26 09:05", *args, Context())
+        self.assertEqual(calm["held"]["C"]["shares"], math.floor(1_080_000 / 51))
+        self.assertTrue(calm["held"]["C"]["buy_reason"].startswith("예약(시가 매수)"))
+        # 다음 장 날짜: 금요일 장 마감 뒤 → 월요일, 장 시작 전 → 오늘
+        friday = datetime(2026, 11, 27, 16, 0, tzinfo=KST)
+        self.assertEqual(next_session_day("KR", friday, time(9, 0)), "2026-11-30")
+        self.assertEqual(next_session_day("KR", friday.replace(hour=8), time(9, 0)), "2026-11-27")
+
+    def test_stock_memory_merge_grade_and_summary(self):
+        from app.stock_memory import MEMORY_MAX, events_from_recommendation, merge, outcome_for, summarize
+
+        result = {"method": "ai", "themes": [{"kind": "trend", "name": "여행", "stocks": [
+            {"symbol": "A", "name": "에이", "close": 100, "evidence": {"score": 70}}]}],
+                  "ai_picks": [{"symbol": "A", "name": "에이", "close": 100, "evidence": {"score": 70}, "reason": "추세 강함", "risk": "변동성"}],
+                  "ai_risk_picks": []}
+        morning = events_from_recommendation(result, "2026-11-25 09:30", "2026-11-25")
+        self.assertEqual({event["type"] for event in morning}, {"pick", "ai_pick"})
+        self.assertEqual(next(event for event in morning if event["type"] == "ai_pick")["reason"], "추세 강함")
+        # 같은 날 장중 갱신: 한 건으로 합치고 처음 가격·시각은 유지, 이유는 최신
+        noon = events_from_recommendation({**result, "ai_picks": [{**result["ai_picks"][0], "close": 104, "reason": "수급 개선"}]},
+                                           "2026-11-25 12:00", "2026-11-25")
+        merged = merge(merge([], morning), noon)
+        ai = [event for event in merged if event["type"] == "ai_pick"]
+        self.assertEqual(len(ai), 1)
+        self.assertEqual((ai[0]["price"], ai[0]["at"], ai[0]["reason"]), (100, "2026-11-25 09:30", "수급 개선"))
+        self.assertEqual(len(merge([], [{**morning[0], "day": f"2026-{i // 28 + 1:02d}-{i % 28 + 1:02d}"} for i in range(200)])), MEMORY_MAX)
+        # 채점: 판단 뒤 거래일 기준, 아직 안 지난 기간은 비움, 지수 대비도
+        closes = [("2026-11-25", 100), ("2026-11-26", 102), ("2026-11-27", 99), ("2026-11-30", 101), ("2026-12-01", 103), ("2026-12-02", 110)]
+        index = [(day, 1000 + offset * 10) for offset, (day, _) in enumerate(closes)]
+        outcome = outcome_for(ai[0], closes, index)
+        self.assertEqual(outcome["d1"], 0.02)
+        self.assertEqual(outcome["d5"], 0.1)
+        self.assertAlmostEqual(outcome["x5"], 0.1 - 0.05)
+        self.assertNotIn("d20", outcome)
+        # 요약: as_of 전에 끝난 결과만(미래 정보 없음)
+        graded = [{**ai[0], "outcome": outcome}]
+        self.assertEqual(summarize(graded, "2026-12-03")["ai_pick_x5"], 0.05)
+        self.assertEqual(summarize(graded, "2026-11-25")["ai_pick_samples"], 0)  # 그날 판단은 아직 안 셈
+
+    def test_market_session_hours(self):
+        from datetime import datetime
+
+        from app.briefing import KST
+        from app.managed_live import market_session
+
+        at = lambda text: datetime.fromisoformat(text).replace(tzinfo=KST)  # noqa: E731
+        self.assertEqual(market_session("KR", at("2026-11-25T10:00")), (True, "2026-11-25"))
+        self.assertFalse(market_session("KR", at("2026-11-25T15:31"))[0])
+        self.assertFalse(market_session("KR", at("2026-11-28T10:00"))[0])  # 토요일
+        self.assertEqual(market_session("US", at("2026-11-25T23:40")), (True, "2026-11-25"))  # 겨울: 뉴욕 09:40
+        self.assertFalse(market_session("US", at("2026-11-25T22:40"))[0])  # 뉴욕 08:40, 아직 개장 전
+        self.assertEqual(market_session("US", at("2026-11-26T05:30")), (True, "2026-11-25"))  # 뉴욕 15:30, 날짜는 미국 기준
+        self.assertTrue(market_session("US", at("2026-07-01T22:40"))[0])  # 서머타임: 뉴욕 09:40
+        from app.managed_live import price_day
+
+        self.assertEqual(price_day("KR", at("2026-11-23T04:54")), "2026-11-20")  # 월요일 장 전 → 금요일 종가
+        self.assertEqual(price_day("KR", at("2026-11-25T10:00")), "2026-11-25")
+        self.assertEqual(price_day("KR", at("2026-11-25T16:00")), "2026-11-25")
+        self.assertEqual(price_day("US", at("2026-11-25T06:15")), "2026-11-24")  # 미국 장 마감 뒤(뉴욕 전날 16:15)
+        self.assertEqual(price_day("US", at("2026-11-25T20:00")), "2026-11-24")  # 뉴욕 06:00, 장 전
+
+    def test_pick_count_can_exceed_five(self):
+        from app.virtual import pick_recommendations
+
+        result = {"combined_picks": [{"symbol": f"C{i}", "name": f"c{i}"} for i in range(5)],
+                  "ai_picks": [{"symbol": "C0", "name": "c0"}, {"symbol": "A1", "name": "a1"}],
+                  "themes": [{"kind": "trend", "name": "t", "stocks": [{"symbol": f"T{i}", "name": f"t{i}", "evidence": {"score": 50 + i}} for i in range(6)]}]}
+        picks = pick_recommendations(result, "all", limit=10)
+        self.assertEqual([pick["symbol"] for pick in picks][:6], ["C0", "C1", "C2", "C3", "C4", "A1"])  # 통합 5개 뒤로 AI → 테마
+        self.assertEqual(len(picks), 10)
+        self.assertEqual(picks[6]["symbol"], "T5")  # 테마는 근거 점수 높은 순
+        self.assertEqual(len(pick_recommendations(result, "ai", limit=10)), 2)  # AI 추천만은 AI가 고른 수까지
+        # 수를 정하지 않으면 추천이 고른 그대로: 통합 5개, AI 2개, 테마 6개
+        self.assertEqual([len(pick_recommendations(result, source)) for source in ("all", "ai", "theme")], [5, 2, 6])
+
+    def test_combined_picks_keep_every_ai_pick(self):
+        from app.recommendations import combined_picks
+
+        ai = [{"symbol": f"A{i}", "name": f"a{i}"} for i in range(8)]
+        themes = [{"kind": "trend", "name": "t", "sector_id": 1, "stocks": [{"symbol": "T0", "name": "t0", "evidence": {"score": 60}}]}]
+        self.assertEqual(len(combined_picks(themes, ai)), 8)  # AI가 8개를 고르면 8개 모두
+        self.assertEqual(len(combined_picks(themes, ai[:2])), 3)  # 적으면 테마로 채움(테마 후보가 있는 만큼, 최대 5)
+
+    async def test_change_end_date_moves_group_and_keeps_original(self):
+        import json
+        from unittest import mock
+
+        from app import virtual
+
+        fake = FakeRedis()
+        today = date.today()
+        created = (today - timedelta(days=9)).isoformat()
+        first_end = (today - timedelta(days=8)).isoformat()
+        items = [{"id": "aaaaaaaaaaaa", "group": "g1", "created_date": created, "end_date": first_end},
+                 {"id": "bbbbbbbbbbbb", "group": "g1", "created_date": created, "end_date": first_end},
+                 {"id": "cccccccccccc", "group": None, "created_date": created, "end_date": first_end}]
+        fake.data[virtual._key("alice")] = json.dumps(items)
+        with mock.patch.object(virtual, "redis", fake), \
+                mock.patch.object(virtual, "get_json", new=mock.AsyncMock(side_effect=lambda key: json.loads(fake.data[key]) if key in fake.data else None)):
+            changed = await virtual.change_end_date("alice", "aaaaaaaaaaaa", today)
+            with self.assertRaises(ValueError):  # 만든 날보다 앞이면 안 됨
+                await virtual.change_end_date("alice", "cccccccccccc", today - timedelta(days=20))
+            with self.assertRaises(ValueError):  # 너무 먼 미래도 안 됨
+                await virtual.change_end_date("alice", "cccccccccccc", today + timedelta(days=200))
+            with self.assertRaises(LookupError):
+                await virtual.change_end_date("alice", "dddddddddddd", today)
+        self.assertEqual({item["id"] for item in changed}, {"aaaaaaaaaaaa", "bbbbbbbbbbbb"})  # 세 가지 비교 묶음은 함께
+        saved = {item["id"]: item for item in json.loads(fake.data[virtual._key("alice")])}
+        self.assertEqual(saved["bbbbbbbbbbbb"]["end_date"], today.isoformat())
+        self.assertEqual(saved["bbbbbbbbbbbb"]["original_end_date"], first_end)
+        self.assertEqual(saved["cccccccccccc"]["end_date"], first_end)  # 다른 포트폴리오는 그대로
 
 
 class DailyRecordTest(unittest.TestCase):
